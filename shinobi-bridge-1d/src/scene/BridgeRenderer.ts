@@ -1,33 +1,44 @@
 import * as THREE from 'three';
 import type { Game } from '../core/Game.ts';
-import { makeWetMaterial } from '../render/Assets.ts';
 import type { RenderContext, RenderModule } from '../render/RenderContext.ts';
-import { placeOnDeck } from '../render/RenderContext.ts';
-import { DECK_HALF_WIDTH, PLANK_COUNT, PLANK_WIDTH } from '../scene/SuspensionBridge.ts';
+import { Anchors } from './bridge/Anchors.ts';
+import { DeckSampler } from './bridge/DeckSampler.ts';
+import { DeckSnow } from './bridge/DeckSnow.ts';
+import { Planks } from './bridge/Planks.ts';
+import { addRopes } from './bridge/Ropes.ts';
 
 /**
- * STUB (to be replaced): the suspension bridge. Planks follow the sway model; broken planks vanish.
- * The real module adds ropes, posts, lanterns, cracks, falling planks and the snow mesh.
+ * The rope suspension bridge, following the simulation's sway model (sag, three vertical modes, lateral
+ * swing and roll) every frame:
+ * - Planks: weathered oak boards, instanced, cracked by hail and tumbling away when they break.
+ * - Ropes: hand ropes, deck-edge ropes and suspenders, deformed on the GPU from the deck samples.
+ * - Anchors: timber posts the ropes tie off on, and a swinging lantern with a warm light at each end.
+ * - Snow: drifts on the deck from the simulation's snow height map.
+ * Draw calls: planks 3 (+1 while halves fall), ropes 2, each anchor end in view 2, lanterns 2, snow 1
+ * (only with snow on the deck): 13 at most, against a budget of 25. Lights: the two lanterns'.
  */
 export class BridgeRenderer implements RenderModule {
-  private readonly planks: THREE.InstancedMesh;
-  private readonly dummy = new THREE.Object3D();
+  private readonly ctx: RenderContext;
+  private readonly group = new THREE.Group();
+  private readonly deck = new DeckSampler();
+  private readonly planks: Planks;
+  private readonly anchors: Anchors;
+  private readonly snow: DeckSnow;
 
   constructor(ctx: RenderContext) {
-    const set = ctx.assets.pbr('plank', 0.3, 1.5);
-    const material = makeWetMaterial({ map: set.map, normalMap: set.normalMap, roughnessMap: set.roughnessMap }, ctx.uniforms);
-    this.planks = new THREE.InstancedMesh(new THREE.BoxGeometry(PLANK_WIDTH, 0.05, DECK_HALF_WIDTH * 2), material, PLANK_COUNT);
-    this.planks.castShadow = this.planks.receiveShadow = true;
-    ctx.scene.add(this.planks);
+    this.ctx = ctx;
+    this.group.name = 'bridge';
+    ctx.scene.add(this.group);
+    this.planks = new Planks(ctx, this.group);
+    this.anchors = new Anchors(ctx, this.group);
+    addRopes(ctx, this.group, this.deck);
+    this.snow = new DeckSnow(ctx, this.group, this.deck);
   }
 
-  update(_dt: number, game: Game): void {
-    for (const p of game.bridge.planks) {
-      placeOnDeck(this.dummy, game, p.x, -0.025);
-      this.dummy.scale.setScalar(p.broken ? 0.0001 : 1);
-      this.dummy.updateMatrix();
-      this.planks.setMatrixAt(p.index, this.dummy.matrix);
-    }
-    this.planks.instanceMatrix.needsUpdate = true;
+  update(dt: number, game: Game): void {
+    this.deck.update(game.bridge);
+    this.planks.update(game);
+    this.anchors.update(dt, game, this.ctx.uniforms.uTime.value);
+    this.snow.update(game);
   }
 }
