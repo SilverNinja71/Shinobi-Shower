@@ -99,8 +99,14 @@ export class CanvasRenderer {
       for (let i = 0; i < count; i++) {
         const seed = Math.abs(Math.sin(b.id * 17.3 + i * 9.1) * 1000) % 1;
         const seed2 = Math.abs(Math.sin(b.id * 5.7 + i * 31.7) * 1000) % 1;
+        const x = b.min.x + ((i + 0.2 + seed * 0.6) / count) * width;
+        // A prop under a low overhang would read as the thing in the way, so those spots stay bare.
+        const overhung = game.level.boxes.some(
+          (o) => o !== b && o.min.x - 1.5 < x && o.max.x + 1.5 > x && o.min.y >= b.max.y && o.min.y < b.max.y + 4,
+        );
+        if (overhung) continue;
         this.props.push({
-          x: b.min.x + ((i + 0.2 + seed * 0.6) / count) * width,
+          x,
           y: b.max.y,
           kind: Math.floor(seed2 * 6),
           scale: 0.75 + seed * 0.45,
@@ -1220,8 +1226,8 @@ export class CanvasRenderer {
     const y = this.Y(c.y) + originY;
     const g = ctx.createRadialGradient(x, y, this.s * 2.5, x, y, this.s * 8.5);
     g.addColorStop(0, 'rgba(235,245,240,0)');
-    g.addColorStop(0.55, `rgba(235,245,240,${this.steam * 0.85})`);
-    g.addColorStop(1, `rgba(235,245,240,${this.steam * 0.98})`);
+    g.addColorStop(0.55, `rgba(235,245,240,${this.steam * 0.7})`);
+    g.addColorStop(1, `rgba(235,245,240,${this.steam * 0.86})`);
     ctx.fillStyle = g;
     ctx.fillRect(0, 0, this.w, this.h);
     // Slow rolling clouds in the fog.
