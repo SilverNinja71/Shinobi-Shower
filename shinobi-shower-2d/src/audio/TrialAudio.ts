@@ -1,6 +1,5 @@
 const MAX_SPLASHES_PER_SECOND = 8;
 const VOLUME = 0.35;
-const VOLUME = 0.35;
 
 /** Fully synthesized: running water, drips that can be followed by ear, and the ring of the blade. */
 export class TrialAudio {
