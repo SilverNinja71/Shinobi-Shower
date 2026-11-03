@@ -49,7 +49,7 @@ void main() {
   // Across the band: a hot edge where the blade passed, a soft body toward the inside.
   float body = smoothstep(0.0, 0.85, r);
   float edge = smoothstep(0.82, 1.0, r) * (1.0 - smoothstep(0.985, 1.0, r) * 0.6);
-  float tips = smoothstep(0.0, 0.08, s) * smoothstep(1.0, 0.92, s);
+  float tips = smoothstep(0.0, 0.08, s) * (1.0 - smoothstep(0.92, 1.0, s));
   vec3 color = vec3(0.0);
 
 #if defined(STEEL)

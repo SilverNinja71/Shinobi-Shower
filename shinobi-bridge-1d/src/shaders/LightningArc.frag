@@ -21,7 +21,7 @@ void main() {
   float flick = 0.55 + 0.45 * hash12(vec2(floor(uTime * 40.0), seed));
   float glow = pow(centre, 1.8);
   float core = pow(centre, 9.0);
-  float ends = smoothstep(0.0, 0.12, along) * smoothstep(1.0, 0.88, along);
+  float ends = smoothstep(0.0, 0.12, along) * (1.0 - smoothstep(0.88, 1.0, along));
   vec3 c = vec3(1.0, 0.07, 0.18) * glow * 1.3 + vec3(1.0, 0.82, 0.88) * core * 2.2;
   c *= flick * ends * uIntensity;
 #ifdef USE_FOG

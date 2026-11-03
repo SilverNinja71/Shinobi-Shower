@@ -24,7 +24,7 @@ void main() {
   // behind a fade at the span's ends (and behind the cliffs).
   float x = c.x + uDrift.x * (0.5 + aSeed * 0.6);
   c.x = mod(x + uSpan, uSpan * 2.0) - uSpan;
-  vFade = smoothstep(uSpan, uSpan * 0.7, abs(c.x));
+  vFade = (1.0 - smoothstep(uSpan * 0.7, uSpan, abs(c.x)));
   c.y += sin(uTime * 0.07 + aSeed * 6.28) * 3.0;
   // Face the camera around the vertical axis; the camera always looks down −z, so x is "right".
   vec3 world = c + vec3(position.x * aSize.x, position.y * aSize.y, 0.0);

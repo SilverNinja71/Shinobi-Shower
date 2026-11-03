@@ -109,7 +109,7 @@ export class StateCues {
     rim.setRGB(0, 0, 0);
     if (game.vulnerable > 0 && playing) {
       const fade = Math.min(1, game.vulnerable / 0.4);
-      addScaled(rim, VULNERABLE, fade * (0.65 + 0.55 * Math.sin(time * 12)));
+      addScaled(rim, VULNERABLE, fade * (0.42 + 0.33 * Math.sin(time * 12)));
     }
     if (exposed) addScaled(rim, VULNERABLE, 0.35 + (g < 1 ? (1 - g) * 1.6 : 0));
     if (this.tierFlash > 0) addScaled(rim, TIER_UP, this.tierFlash * 2.2);

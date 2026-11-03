@@ -36,7 +36,7 @@ void main() {
   // Honeycomb wrapped around the bubble.
   vec2 uv = vec2(atan(vLocal.z, vLocal.x) * 2.4, vLocal.y * 4.2);
   vec3 hx = hexGrid(uv);
-  float edge = smoothstep(0.06, 0.0, hx.x);
+  float edge = (1.0 - smoothstep(0.0, 0.06, hx.x));
   float cell = hash12(floor(hx.yz * 10.0));
   float current = 0.5 + 0.5 * sin(vLocal.y * 9.0 - uTime * 2.2 + cell * 6.0);
   vec3 violet = vec3(0.62, 0.42, 1.0);

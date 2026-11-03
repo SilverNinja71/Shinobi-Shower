@@ -50,14 +50,16 @@ void main() {
     softness = 0.6;
   } else if (shape < 1.5) {
     float across = 1.0 - smoothstep(0.0, 1.0, abs(c.x));
-    float along = smoothstep(1.0, 0.5, abs(c.y)) * mix(0.3, 1.0, c.y * 0.5 + 0.5);
+    float along = (1.0 - smoothstep(0.5, 1.0, abs(c.y))) * mix(0.3, 1.0, c.y * 0.5 + 0.5);
     float fade = 1.0 - smoothstep(0.5, 1.0, t);
     float m = across * across * along * fade * vInfo.w;
     color = (vColor.rgb * (1.0 + 1.5 * uLightning) + vGlow) * m;
     cover = vColor.a * m;
     softness = 0.08;
   } else if (shape < 2.5) {
-    float g = exp(-r2 * 5.0) + 0.35 * exp(-r2 * 1.6);
+    // The wide term would still be ~8% bright where the quad ends; window it to zero inside the quad,
+    // or bright HDR glows (and the bloom on them) show the quad as a square.
+    float g = (exp(-r2 * 5.0) + 0.35 * exp(-r2 * 1.6)) * (1.0 - smoothstep(0.45, 1.0, r2));
     float fade = 1.0 - t;
     color = (vColor.rgb + vGlow) * g * fade * fade * vInfo.w;
     softness = 0.3;

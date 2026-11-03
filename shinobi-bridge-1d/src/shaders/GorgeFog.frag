@@ -46,7 +46,7 @@ void main() {
   vec2 p = vec2(vUv.x * 0.35 + vSeed, vUv.y * 0.18 - uTime * (0.006 + vSeed * 0.006));
   float streak = texture2D(uNoise, p).b;
   float body = texture2D(uNoise, p * 0.5 + vec2(0.3, 0.7)).r;
-  float column = smoothstep(0.5, 0.12, abs(vUv.x - 0.5)) * smoothstep(0.0, 0.3, vUv.y) * smoothstep(1.0, 0.55, vUv.y);
+  float column = (1.0 - smoothstep(0.12, 0.5, abs(vUv.x - 0.5))) * smoothstep(0.0, 0.3, vUv.y) * (1.0 - smoothstep(0.55, 1.0, vUv.y));
   density = column * smoothstep(0.3, 0.85, streak * 0.55 + body * 0.6);
   alpha = density * 0.45 * vFade;
 #else
@@ -65,8 +65,8 @@ void main() {
   alpha = 1.0 - exp(-density * (0.075 + layer * 0.32) * graze);
   // Fade out well before the far end and near the camera, so no sheet ever shows an edge. Upper
   // sheets stay in the gorge; deeper ones reach further out over the sea.
-  alpha *= smoothstep(-330.0, -90.0 - layer * 170.0, vWorld.z) * smoothstep(60.0, 30.0, vWorld.z);
-  alpha *= smoothstep(95.0, 60.0, abs(vWorld.x)) * smoothstep(6.0, 26.0, dist);
+  alpha *= smoothstep(-330.0, -90.0 - layer * 170.0, vWorld.z) * (1.0 - smoothstep(30.0, 60.0, vWorld.z));
+  alpha *= (1.0 - smoothstep(60.0, 95.0, abs(vWorld.x))) * smoothstep(6.0, 26.0, dist);
 #endif
   alpha *= uOpacity * (0.75 + 0.35 * uMist + 0.15 * uRain);
   gl_FragColor = vec4(fogLight(view, density), clamp(alpha, 0.0, 1.0));

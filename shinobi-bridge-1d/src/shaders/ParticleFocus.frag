@@ -29,7 +29,7 @@ void main() {
 
   float front = uAge * SPEED;
   float back = -uAge * SPEED * 0.55;
-  float drawn = smoothstep(front + 0.6, front - 0.4, ahead) * smoothstep(back - 0.6, back + 0.4, ahead);
+  float drawn = (1.0 - smoothstep(front - 0.4, front + 0.6, ahead)) * smoothstep(back - 0.6, back + 0.4, ahead);
 
   // The hairline thins as it cools; the glows outlast it. Everything dies away before the quad's rim.
   float rim = 1.0 - smoothstep(0.55, 1.0, ad / (0.5 * uSize.y));

@@ -96,7 +96,7 @@ vec4 beadLayer(vec2 p, float cells, float t, float amount, float seed) {
   vec2 d = fract(q) - 0.5 - c + vec2(0.0, slide);
   // A creeping bead stretches a little along its path.
   d.y *= 1.0 - 0.15 * step(0.24, rMax);
-  float m = smoothstep(r, r * 0.55, length(d)) * smoothstep(1.0, 0.85, life);
+  float m = (1.0 - smoothstep(r * 0.55, r, length(d))) * (1.0 - smoothstep(0.85, 1.0, life));
   return vec4(d / max(r, 1e-3) * m, m, r / cells);
 }
 
@@ -121,17 +121,17 @@ vec4 runLayer(vec2 p, float cols, float t, float speed, float seed, out float ra
   float r = 0.009 + 0.008 * g.y;
   radius = r;
   vec2 d = vec2(p.x - x, (p.y - y) * 0.8);
-  float m = smoothstep(r, r * 0.7, length(d));
+  float m = (1.0 - smoothstep(r * 0.7, r, length(d)));
   float above = p.y - y;
   float trailW = r * 0.62;
-  float trail = smoothstep(trailW, trailW * 0.35, abs(d.x)) * smoothstep(-r * 0.3, r, above) * smoothstep(0.55, 0.0, above);
+  float trail = (1.0 - smoothstep(trailW * 0.35, trailW, abs(d.x))) * smoothstep(-r * 0.3, r, above) * (1.0 - smoothstep(0.0, 0.55, above));
   // Tiny beads strung along the trail, about every 2% of the screen, not all of them.
   float by = above * 48.0 + g.z * 3.0;
   float cell = floor(by);
   vec2 bd = vec2(d.x, (fract(by) - 0.5) / 48.0);
   float br = trailW * (0.35 + 0.4 * hash12(vec2(col, cell)));
-  float bead = smoothstep(br, br * 0.6, length(bd)) * step(0.45, hash12(vec2(cell, col + 3.0)))
-    * smoothstep(r * 1.5, r * 3.0, above) * smoothstep(0.4, 0.08, above);
+  float bead = (1.0 - smoothstep(br * 0.6, br, length(bd))) * step(0.45, hash12(vec2(cell, col + 3.0)))
+    * smoothstep(r * 1.5, r * 3.0, above) * (1.0 - smoothstep(0.08, 0.4, above));
   vec2 off = d / r * m + bd / max(br, 1e-4) * bead;
   return vec4(off, max(m, bead), trail);
 }
@@ -212,9 +212,9 @@ void main() {
     float edge = smoothstep(0.7, 1.0, length(slope));
     color = mix(color, soft, 0.6 * wet);
     color *= 1.0 - 0.3 * edge * wet;
-    float crescent = smoothstep(0.35, 0.85, -slope.y) * smoothstep(1.0, 0.75, length(slope)) * wet;
+    float crescent = smoothstep(0.35, 0.85, -slope.y) * (1.0 - smoothstep(0.75, 1.0, length(slope))) * wet;
     color += crescent * (soft * 0.5 + vec3(0.004, 0.005, 0.007));
-    float glint = smoothstep(0.22, 0.0, length(slope - vec2(-0.35, 0.45))) * wet;
+    float glint = (1.0 - smoothstep(0.0, 0.22, length(slope - vec2(-0.35, 0.45)))) * wet;
     color += glint * (vec3(0.012, 0.015, 0.02) + soft * 0.35) * (1.0 + 4.0 * uLightning);
   }
 

@@ -17,7 +17,7 @@ void main() {
   float rays = exp(-abs(q.y) * 46.0) * exp(-abs(q.x) * 2.4) + exp(-abs(q.x) * 46.0) * exp(-abs(q.y) * 2.4);
   float diag = (exp(-abs(q.x - q.y) * 60.0) + exp(-abs(q.x + q.y) * 60.0)) * exp(-r * 5.5) * 0.5;
   vec3 c = uColor * (rays + diag + core * 1.5) + vec3(1.0) * core * 1.2;
-  c *= uIntensity * smoothstep(1.0, 0.85, r);
+  c *= uIntensity * (1.0 - smoothstep(0.85, 1.0, r));
 #ifdef USE_FOG
   #ifdef FOG_EXP2
     float fogFactor = 1.0 - exp(-fogDensity * fogDensity * vFogDepth * vFogDepth);

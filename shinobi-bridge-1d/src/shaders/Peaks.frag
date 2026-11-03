@@ -55,7 +55,7 @@ void main() {
   float density = 0.0005 + 0.0042 * uMist + 0.0007 * uRain + 0.0016 * uSnow;
   col = mix(col, hazeCol, 1.0 - exp(-d * density));
   // The valleys are full of cloud: the ranges rise out of a pale, moonlit sea of mist.
-  float valley = smoothstep(5.0, -150.0, vWorld.y + (grain.g - 0.5) * 60.0);
+  float valley = (1.0 - smoothstep(-150.0, 5.0, vWorld.y + (grain.g - 0.5) * 60.0));
   col = mix(col, hazeCol * 1.3, valley * 0.85);
 
   gl_FragColor = vec4(col, 1.0);

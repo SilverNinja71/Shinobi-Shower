@@ -388,7 +388,7 @@ function dualRonin(t: Tailor): TierLook {
       main: /* glsl */ `
         vec2 crestUv = vec2((vUv.x - 0.5) * 3.4, (vUv.y - 0.84) * 2.0);
         float crestR = length(crestUv);
-        float crest = smoothstep(0.075, 0.068, crestR) * smoothstep(0.045, 0.052, crestR) + smoothstep(0.03, 0.024, length(crestUv - vec2(0.0, 0.0)));
+        float crest = (1.0 - smoothstep(0.068, 0.075, crestR)) * smoothstep(0.045, 0.052, crestR) + (1.0 - smoothstep(0.024, 0.03, length(crestUv - vec2(0.0, 0.0))));
         diffuseColor.rgb = mix(diffuseColor.rgb, vec3(0.75, 0.74, 0.7), clamp(crest, 0.0, 1.0) * step(0.3, vUv.x) * step(vUv.x, 0.7));`,
     },
   );

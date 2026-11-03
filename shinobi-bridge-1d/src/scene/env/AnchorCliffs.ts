@@ -497,7 +497,7 @@ function dressCliffMaterial(material: THREE.MeshStandardMaterial, u: SharedUnifo
         // Below the deck the rock sinks into the gorge fog, in drifting layers.
         if (vWetPos.y < 4.0) {
           float layers = wetNoise(vWetPos.xz * 0.025 + uWindDrift * 0.01) - 0.5;
-          float sink = smoothstep(-5.0, -95.0, vWetPos.y + layers * 18.0);
+          float sink = (1.0 - smoothstep(-95.0, -5.0, vWetPos.y + layers * 18.0));
           gl_FragColor.rgb = mix(gl_FragColor.rgb, uGorgeFog * (1.0 + uLightning * 3.0), sink * 0.94);
         }`,
       );

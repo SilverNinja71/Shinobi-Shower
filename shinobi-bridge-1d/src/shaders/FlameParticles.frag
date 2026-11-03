@@ -30,7 +30,7 @@ void main() {
   q.x *= 1.0 + max(0.0, q.y) * 0.9;
   float r = length(q);
   float torn = noise2(vec2(q.x * 3.0 + vSeed * 9.0, q.y * 2.5 - uTime * 6.0 - vSeed * 4.0));
-  float shape = smoothstep(1.0, 0.25, r + (torn - 0.5) * 0.6);
+  float shape = (1.0 - smoothstep(0.25, 1.0, r + (torn - 0.5) * 0.6));
   if (shape <= 0.0) discard;
   float t = vLife;
   vec3 hot = vec3(1.0, 0.92, 0.62);

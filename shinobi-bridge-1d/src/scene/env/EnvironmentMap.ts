@@ -23,7 +23,7 @@ void main() {
   vec3 col = mix(horizon, zenith, smoothstep(0.0, 0.7, max(h, 0.0)));
   vec2 cp = d.xz / (max(h, 0.0) + 0.1);
   col *= 0.7 + 0.6 * texture2D(uNoise, cp * 0.1).r;
-  col = mix(col, vec3(0.006, 0.007, 0.009), smoothstep(0.02, -0.25, h));
+  col = mix(col, vec3(0.006, 0.007, 0.009), (1.0 - smoothstep(-0.25, 0.02, h)));
   float a = acos(clamp(dot(d, uMoonDir), -1.0, 1.0));
   col += vec3(0.78, 0.84, 1.0) * (exp(-a * 38.0) * 5.0 + exp(-a * 7.0) * 0.12);
   gl_FragColor = vec4(col, 1.0);

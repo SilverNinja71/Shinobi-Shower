@@ -58,7 +58,7 @@ void main() {
 
   // The moon behind thin cloud: a veiled disc, a tight halo and a broad glow.
   float veil = exp(-cover * 3.4);
-  float disc = smoothstep(0.0175, 0.0145, moonAngle);
+  float disc = (1.0 - smoothstep(0.0145, 0.0175, moonAngle));
   float halo = exp(-moonAngle * 26.0) * 0.55 + exp(-moonAngle * 6.5) * 0.09;
   col += uMoonColor * (disc * 1.6 * veil + halo * (0.25 + 0.75 * veil)) * (1.0 - 0.7 * uMist);
 
@@ -76,7 +76,7 @@ void main() {
   col = mix(col, haze, clamp(uRain * 0.22 * veilNear + uSnow * 0.25 + uMist * 0.6, 0.0, 0.85));
 
   // Below the horizon there is only haze (the sea and the far ranges fade into exactly this).
-  col = mix(col, haze, smoothstep(0.0, -0.04, d.y));
+  col = mix(col, haze, (1.0 - smoothstep(-0.04, 0.0, d.y)));
 
   gl_FragColor = vec4(col, 1.0);
   #include <tonemapping_fragment>

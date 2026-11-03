@@ -35,7 +35,7 @@ void main() {
   float shimmer = 0.5 + 0.5 * sin((n + across) * 19.0 - uTime * 7.0);
   c = mix(vec3(0.35, 0.3, 1.0), vec3(0.95, 0.5, 1.0), shimmer) * wisp * 0.9;
   c += vec3(0.55, 0.45, 1.0) * pow(centre, 5.0) * 0.45;
-  c *= smoothstep(0.0, 0.1, along) * smoothstep(1.0, 0.86, along);
+  c *= smoothstep(0.0, 0.1, along) * (1.0 - smoothstep(0.86, 1.0, along));
 #else
   float pulse = 0.55 + 0.45 * sin(along * 13.0 - uTime * 5.5 + seed * 2.3);
   float glow = smoothstep(0.0, 0.7, centre);

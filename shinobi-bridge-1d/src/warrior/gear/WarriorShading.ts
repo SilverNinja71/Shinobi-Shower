@@ -90,7 +90,8 @@ const SURFACE_GLSL = /* glsl */ `
   float edge2 = edge * edge;
   float moonEdge = edge2 * edge2 * edge * smoothstep(-0.25, 0.75, dot(normal, uMoonDir));
   // State cues wash wider over the figure, so a warning reads at a glance.
-  float cueEdge = 0.12 + 0.88 * edge2;
+  // A faint wash plus a strong rim: the figure keeps its form while the warning pulses.
+  float cueEdge = 0.05 + 0.95 * edge2;
   totalEmissiveRadiance += moonEdge * uMoonRim + cueEdge * uCueRim;
 }
 `;

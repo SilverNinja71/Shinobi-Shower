@@ -62,7 +62,7 @@ float iceNoise(vec3 p) {
   float iceFresnel = pow(1.0 - iceFacing, 2.5);
   vec3 iceP = vIcePos + vIceSeed * 13.7;
   // A milky core: hail freezes in layers, clear outside, cloudy at the heart where it began.
-  float iceCore = smoothstep(0.95, 0.35, length(vIcePos));
+  float iceCore = (1.0 - smoothstep(0.35, 0.95, length(vIcePos)));
   float iceShell = 0.5 + 0.5 * sin(length(vIcePos) * 14.0 + iceNoise(iceP * 2.3) * 6.0);
   // Fine fractures: thin bright sheets where the noise crosses its middle.
   float iceVein = 1.0 - smoothstep(0.0, 0.05, abs(iceNoise(iceP * 3.6 + 11.0) - 0.5));
