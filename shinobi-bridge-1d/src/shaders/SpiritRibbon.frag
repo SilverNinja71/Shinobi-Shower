@@ -26,7 +26,7 @@ void main() {
   float along = vStrip.x;
   float across = vStrip.y;
   float seed = vStrip.z;
-  float centre = 1.0 - abs(across * 2.0 - 1.0);
+  float centre = max(0.0, 1.0 - abs(across * 2.0 - 1.0));
   vec3 c;
 #ifdef AURA
   vec2 q = vec2(along * 7.0 - uTime * 1.8, across * 2.2 + seed);

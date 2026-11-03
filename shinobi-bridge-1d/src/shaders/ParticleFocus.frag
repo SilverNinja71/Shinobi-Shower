@@ -39,7 +39,7 @@ void main() {
   float haze = exp(-ad / 0.3) * exp(-uAge / 0.32) * rim;
   // Cut drops along the line catch the flash and wink out at their own moments.
   float cell = floor(ahead * 2.5);
-  float fleck = step(0.72, hash11(cell + 17.0)) * exp(-pow((fract(ahead * 2.5) - 0.5) * 6.0, 2.0) - ad * ad * 900.0);
+  float fleck = step(0.72, hash11(cell + 17.0)) * exp(-((fract(ahead * 2.5) - 0.5) * 6.0) * ((fract(ahead * 2.5) - 0.5) * 6.0) - ad * ad * 900.0);
   fleck *= exp(-max(0.0, uAge - 0.12 * hash11(cell)) / 0.08);
 
   vec3 color = vec3(1.0, 0.97, 0.94) * core * 16.0 + vec3(0.72, 0.8, 1.0) * glow * 2.0 + vec3(1.0, 0.1, 0.2) * haze * 0.8;

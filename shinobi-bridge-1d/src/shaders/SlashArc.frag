@@ -85,7 +85,7 @@ void main() {
     bolts += exp(-d * 90.0) * (0.6 + 0.4 * hash12(vec2(flick, fi + seed)));
   }
   float flash = 0.7 + 0.3 * hash12(vec2(flick, seed + 3.0));
-  color = vec3(0.32, 0.0, 0.03) * body * 0.9 + vec3(1.0, 0.1, 0.22) * bolts * 1.8 * flash + vec3(1.0, 0.75, 0.8) * pow(bolts, 3.0) * 0.8 + vec3(1.0, 0.2, 0.3) * edge * 1.1;
+  color = vec3(0.32, 0.0, 0.03) * body * 0.9 + vec3(1.0, 0.1, 0.22) * bolts * 1.8 * flash + vec3(1.0, 0.75, 0.8) * pow(max(bolts, 0.0), 3.0) * 0.8 + vec3(1.0, 0.2, 0.3) * edge * 1.1;
 #endif
 
   float a = head * trail * life * tips * uStrength;

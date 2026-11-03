@@ -31,7 +31,7 @@ void main() {
   float a = mix(1.66, -1.66, s);
   float up = a >= 0.0 ? (uHigh - uPivot) : (uPivot - uLow);
   // A crescent: thickest mid-sweep, pointed at both ends.
-  float thick = 0.5 * pow(sin(PI * aArc.x), 0.7) + 0.04;
+  float thick = 0.5 * pow(max(sin(PI * aArc.x), 0.0), 0.7) + 0.04;
   float k = mix(1.0 - thick, 1.0, aArc.y);
   vec3 p = uOrigin + vec3(side * uReach * cos(a) * k, uPivot + up * sin(a) * k, uDepth);
   // The unused second arc collapses to nothing.

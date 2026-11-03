@@ -74,7 +74,8 @@ void main() {
     softness = 0.15;
   } else if (shape < 4.5) {
     float r = sqrt(r2);
-    float band = exp(-pow((r - 0.8) / 0.1, 2.0));
+    float bandX = (r - 0.8) / 0.1;
+    float band = exp(-bandX * bandX);
     float fade = 1.0 - t;
     color = (vColor.rgb + vGlow) * band * fade * fade;
     cover = vColor.a * band * fade;

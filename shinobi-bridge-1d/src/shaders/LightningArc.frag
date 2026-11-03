@@ -16,7 +16,7 @@ float hash12(vec2 p) {
 
 void main() {
   float along = vStrip.x;
-  float centre = 1.0 - abs(vStrip.y * 2.0 - 1.0);
+  float centre = max(0.0, 1.0 - abs(vStrip.y * 2.0 - 1.0));
   float seed = vStrip.z;
   float flick = 0.55 + 0.45 * hash12(vec2(floor(uTime * 40.0), seed));
   float glow = pow(centre, 1.8);

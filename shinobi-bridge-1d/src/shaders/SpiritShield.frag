@@ -32,7 +32,7 @@ vec3 hexGrid(vec2 uv) {
 
 void main() {
   float facing = abs(dot(normalize(vNormal), normalize(vView)));
-  float fres = pow(1.0 - facing, 2.6);
+  float fres = pow(max(1.0 - facing, 0.0), 2.6);
   // Honeycomb wrapped around the bubble.
   vec2 uv = vec2(atan(vLocal.z, vLocal.x) * 2.4, vLocal.y * 4.2);
   vec3 hx = hexGrid(uv);
