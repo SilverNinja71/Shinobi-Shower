@@ -1,0 +1,241 @@
+<title>Shinobi Shower 1D</title>
+<meta name="claude:viewport-fit-sides" content="cover">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Azeret+Mono:wght@400;600&family=Shippori+Mincho+B1:wght@700;800&family=Zen+Kaku+Gothic+New:wght@400;500;700&display=swap">
+<style>
+  /* Layout: one rooftop lane fills the screen; the HUD hangs in a thin frame above it like a shop sign. */
+  :root {
+    color-scheme: dark;
+    --night: #080a14;
+    --panel: rgba(9, 12, 24, 0.82);
+    --ink: #e8ecf6;
+    --muted: #8d95b3;
+    --water: #58e6ff;
+    --flame: #ff4a3d;
+    --spirit: #b88cff;
+    --gold: #f4dc8a;
+    --danger: #ff5468;
+    --line: rgba(141, 149, 179, 0.28);
+    --display: "Shippori Mincho B1", "Hiragino Mincho ProN", "Yu Mincho", Georgia, serif;
+    --body: "Zen Kaku Gothic New", "Hiragino Sans", system-ui, sans-serif;
+    --mono: "Azeret Mono", ui-monospace, "SF Mono", Menlo, monospace;
+  }
+  [hidden] { display: none !important; }
+  html, body { height: 100%; }
+  body { background: var(--night); color: var(--ink); font: 15px/1.5 var(--body); overflow: hidden; user-select: none; -webkit-user-select: none; }
+  body.playing, body.playing * { cursor: none !important; }
+  #view { position: fixed; inset: 0; width: 100%; height: 100%; display: block; }
+
+  .label { font: 600 10px/1 var(--mono); letter-spacing: 0.14em; text-transform: uppercase; color: var(--muted); }
+  .num { font-family: var(--mono); font-variant-numeric: tabular-nums; }
+  .bar { position: relative; height: 6px; background: rgba(141, 149, 179, 0.18); overflow: hidden; }
+  .bar > i { position: absolute; inset: 0; transform-origin: left; background: var(--water); transition: transform 0.08s linear; }
+
+  /* HUD */
+  #hud { position: fixed; inset: 0; pointer-events: none; padding-top: calc(env(safe-area-inset-top, 0px) + 12px); padding-bottom: calc(env(safe-area-inset-bottom, 0px) + 12px); padding-left: max(16px, env(safe-area-inset-left, 0px)); padding-right: max(16px, env(safe-area-inset-right, 0px)); display: flex; flex-direction: column; justify-content: space-between; }
+  .hud-row { display: grid; grid-template-columns: 1fr auto 1fr; align-items: start; gap: 12px; }
+  .plate { background: var(--panel); border: 1px solid var(--line); padding: 8px 12px; backdrop-filter: blur(4px); }
+  #badge { justify-self: start; display: grid; grid-template-columns: auto 1fr; column-gap: 10px; align-items: center; min-width: 0; width: min(240px, 100%); }
+  #hud-level { grid-row: span 2; font: 800 30px/1 var(--display); color: var(--gold); }
+  #hud-title { font-weight: 700; font-size: 13px; line-height: 1.1; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  #badge .bar { height: 4px; } #badge .bar > i { background: var(--gold); }
+  #weather { text-align: center; min-width: 150px; }
+  #hud-season { font: 800 22px/1.05 var(--display); letter-spacing: 0.04em; }
+  #hud-wave { margin: 3px 0 6px; }
+  #weather .bar { height: 3px; } #weather .bar > i { background: var(--ink); opacity: 0.6; }
+  #dry-plate { justify-self: end; width: min(240px, 100%); }
+  .dry-head { display: flex; justify-content: space-between; align-items: baseline; gap: 8px; }
+  #hud-dry { font: 600 20px/1 var(--mono); font-variant-numeric: tabular-nums; }
+  #dry-plate .bar { height: 8px; margin-top: 6px; }
+  #hud-dry-fill[data-low="true"] { background: var(--danger); }
+  #hud-armor { margin-top: 6px; font: 600 10px/1 var(--mono); letter-spacing: 0.1em; text-transform: uppercase; }
+  #hud-armor[data-state="up"] { color: var(--spirit); }
+  #hud-armor[data-state="down"] { color: var(--muted); }
+  #hud-armor[data-state="broken"] { color: var(--danger); }
+
+  .hud-bottom { display: flex; justify-content: center; align-items: end; gap: 10px; flex-wrap: wrap; }
+  .meter { width: 150px; }
+  .meter-head { display: flex; justify-content: space-between; gap: 8px; margin-bottom: 5px; }
+  #hud-blade .bar > i { background: var(--muted); }
+  #hud-blade[data-ready="true"] .bar > i { background: var(--water); box-shadow: 0 0 10px var(--water); }
+  #hud-blade[data-flame="true"][data-ready="true"] .bar > i { background: var(--flame); box-shadow: 0 0 10px var(--flame); }
+  #hud-blade-fill { transition: none !important; }
+  #hud-stamina-fill { background: #7d86a8 !important; }
+  #hud-stamina-fill[data-ready="true"] { background: var(--ink) !important; }
+  #stamina { position: relative; }
+  #hud-dash-cost { position: absolute; top: -2px; bottom: -2px; width: 1px; background: var(--danger); }
+  #hud-focus { width: 120px; text-align: center; }
+  #hud-focus-time { font: 600 13px/1.4 var(--mono); }
+  #hud-focus[data-ready="true"] { border-color: var(--gold); box-shadow: 0 0 14px rgba(244, 220, 138, 0.35); }
+  #hud-focus[data-ready="true"] #hud-focus-time { color: var(--gold); }
+  #hud-combo { position: fixed; left: 50%; transform: translateX(-50%); bottom: calc(env(safe-area-inset-bottom, 0px) + 84px); font: 600 13px/1 var(--mono); color: var(--water); letter-spacing: 0.08em; text-shadow: 0 0 8px rgba(88, 230, 255, 0.6); }
+
+  #toast { position: fixed; left: 50%; top: 24%; transform: translate(-50%, 8px); text-align: center; opacity: 0; transition: opacity 0.25s, transform 0.25s; pointer-events: none; width: calc(100% - 32px); }
+  #toast.show { opacity: 1; transform: translate(-50%, 0); }
+  .toast-main { font: 800 clamp(30px, 6vw, 56px)/1.05 var(--display); letter-spacing: 0.03em; text-wrap: balance; text-shadow: 0 2px 24px rgba(0, 0, 0, 0.6); }
+  .toast-sub { margin-top: 6px; font: 600 12px/1.2 var(--mono); letter-spacing: 0.16em; text-transform: uppercase; color: var(--muted); }
+  #toast[data-tone="perk"] .toast-main { color: var(--gold); }
+  #toast[data-tone="perk"] .toast-sub { color: var(--ink); }
+
+  /* Screens */
+  .screen { position: fixed; inset: 0; overflow-y: auto; display: flex; padding-block: calc(env(safe-area-inset-top, 0px) + 24px) calc(env(safe-area-inset-bottom, 0px) + 24px); padding-left: max(16px, env(safe-area-inset-left, 0px)); padding-right: max(16px, env(safe-area-inset-right, 0px)); background: linear-gradient(90deg, rgba(8, 10, 20, 0.94) 0%, rgba(8, 10, 20, 0.86) 50%, rgba(8, 10, 20, 0.35) 100%); }
+  .sheet { margin: auto 0; width: min(640px, 100%); display: grid; gap: 18px; }
+  .eyebrow { font: 600 11px/1 var(--mono); letter-spacing: 0.24em; text-transform: uppercase; color: var(--water); }
+  h1 { margin: 0; font: 800 clamp(42px, 8vw, 76px)/0.95 var(--display); letter-spacing: 0.01em; text-wrap: balance; }
+  h1 span { color: var(--water); text-shadow: 0 0 22px rgba(88, 230, 255, 0.45); }
+  h2 { margin: 0; font: 800 clamp(30px, 5vw, 44px)/1 var(--display); text-wrap: balance; }
+  .lede { margin: 0; max-width: 58ch; color: #c3c9dc; }
+  .rank { display: grid; grid-template-columns: auto 1fr; gap: 4px 14px; align-items: center; padding: 12px 14px; border: 1px solid var(--line); background: var(--panel); }
+  .rank b { grid-row: span 2; font: 800 40px/1 var(--display); color: var(--gold); }
+  .rank-title { font-weight: 700; }
+  .rank .bar > i { background: var(--gold); }
+  .rank-meta { grid-column: 2; display: flex; justify-content: space-between; gap: 8px; flex-wrap: wrap; }
+
+  .stances { display: grid; gap: 0; border-top: 1px solid var(--line); }
+  .stance { display: grid; grid-template-columns: 44px 1fr auto; gap: 12px; align-items: center; padding: 10px 2px; border-bottom: 1px solid var(--line); }
+  .stance .lv { font: 600 12px/1 var(--mono); color: var(--muted); }
+  .stance .name { font-weight: 700; }
+  .stance .detail { font-size: 13px; color: #b8bfd4; }
+  .stance .detail em { font-style: normal; color: var(--danger); opacity: 0.85; }
+  .stance[data-locked="true"] { opacity: 0.42; }
+  .stance label { display: flex; align-items: center; gap: 6px; font: 600 11px/1 var(--mono); letter-spacing: 0.08em; text-transform: uppercase; color: var(--muted); cursor: pointer; }
+  .stance input { accent-color: var(--water); width: 16px; height: 16px; }
+
+  .keys { display: grid; grid-template-columns: repeat(auto-fit, minmax(170px, 1fr)); gap: 8px 18px; font-size: 13px; color: #c3c9dc; }
+  .keys div { display: flex; gap: 8px; align-items: baseline; }
+  kbd { font: 600 11px/1 var(--mono); padding: 3px 6px; border: 1px solid var(--line); border-bottom-width: 2px; color: var(--ink); white-space: nowrap; }
+  .row { display: flex; flex-wrap: wrap; gap: 12px; align-items: center; }
+  .go { font: 800 20px/1 var(--display); letter-spacing: 0.04em; color: var(--night); background: var(--water); border: 0; padding: 14px 26px; cursor: pointer; box-shadow: 0 0 24px rgba(88, 230, 255, 0.35); }
+  .go:hover { background: #8ff0ff; }
+  .ghost { font: 600 12px/1 var(--mono); letter-spacing: 0.1em; text-transform: uppercase; color: var(--ink); background: transparent; border: 1px solid var(--line); padding: 12px 16px; cursor: pointer; }
+  button:focus-visible, input:focus-visible { outline: 2px solid var(--gold); outline-offset: 3px; }
+  .results { display: grid; grid-template-columns: repeat(auto-fit, minmax(120px, 1fr)); gap: 1px; background: var(--line); border: 1px solid var(--line); }
+  .results div { background: var(--night); padding: 10px 12px; display: grid; gap: 4px; }
+  .results b { font: 600 22px/1 var(--mono); font-variant-numeric: tabular-nums; }
+  #over-levels { color: var(--gold); font-weight: 700; }
+
+  #mute { position: fixed; right: max(16px, env(safe-area-inset-right, 0px)); bottom: calc(env(safe-area-inset-bottom, 0px) + 12px); z-index: 5; }
+  body.playing #mute { opacity: 0.5; }
+
+  /* Touch: a thumb pad on each side of the lane. */
+  #touch { position: fixed; left: 0; right: 0; bottom: calc(env(safe-area-inset-bottom, 0px) + 10px); padding-left: max(16px, env(safe-area-inset-left, 0px)); padding-right: max(16px, env(safe-area-inset-right, 0px)); display: none; justify-content: space-between; gap: 10px; pointer-events: none; }
+  @media (pointer: coarse) { body.playing #touch { display: flex; } body.playing .hud-bottom { margin-bottom: 70px; } body.playing #mute { display: none; } }
+  #touch button.small { width: 40px; height: 40px; align-self: end; }
+  #touch > div { display: flex; gap: 8px; }
+  #touch button { pointer-events: auto; width: 62px; height: 62px; border-radius: 50%; border: 1px solid var(--line); background: rgba(9, 12, 24, 0.55); color: var(--ink); font: 600 11px/1 var(--mono); letter-spacing: 0.06em; text-transform: uppercase; touch-action: none; }
+  #touch button.on { background: rgba(88, 230, 255, 0.3); }
+
+  @media (max-width: 640px) {
+    .hud-row { grid-template-columns: 1fr 1fr; }
+    #weather { grid-column: 1 / -1; grid-row: 2; justify-self: center; min-width: 0; }
+    #hud-level { font-size: 24px; }
+    .meter { width: 110px; }
+    #hud-focus { width: 96px; }
+  }
+  @media (prefers-reduced-motion: reduce) { #toast, .bar > i { transition: none; } }
+</style>
+
+<canvas id="view" aria-label="Shinobi Shower 1D: a ninja on a rooftop lane in the weather"></canvas>
+
+<div id="hud" hidden>
+  <div class="hud-row">
+    <div id="badge" class="plate">
+      <div id="hud-level">1</div>
+      <div id="hud-title">Initiate</div>
+      <div class="bar"><i id="hud-exp"></i></div>
+    </div>
+    <div id="weather" class="plate">
+      <div id="hud-season">Drizzle</div>
+      <div id="hud-wave" class="label">Wave 1</div>
+      <div class="bar"><i id="hud-wave-fill"></i></div>
+    </div>
+    <div id="dry-plate" class="plate">
+      <div class="dry-head"><span class="label">Robe dryness</span><span id="hud-dry">100%</span></div>
+      <div class="bar"><i id="hud-dry-fill"></i></div>
+      <div id="hud-armor" hidden></div>
+    </div>
+  </div>
+  <div class="hud-bottom">
+    <div id="hud-blade" class="plate meter">
+      <div class="meter-head"><span class="label">Blade</span><span id="hud-blade-time" class="label num">0.35s</span></div>
+      <div class="bar"><i id="hud-blade-fill"></i></div>
+    </div>
+    <div class="plate meter">
+      <div class="meter-head"><span class="label">Dash</span><span class="label">Space</span></div>
+      <div id="stamina" class="bar"><i id="hud-stamina-fill"></i><span id="hud-dash-cost"></span></div>
+    </div>
+    <div id="hud-focus" class="plate" hidden>
+      <div class="label">Focus cut</div>
+      <div id="hud-focus-time">Ready</div>
+    </div>
+  </div>
+  <div id="hud-combo"></div>
+</div>
+<div id="toast" role="status" aria-live="polite"></div>
+
+<section id="menu" class="screen">
+  <div class="sheet">
+    <div class="eyebrow">One lane · four weathers · fifty levels</div>
+    <h1>Shinobi Shower <span>1D</span></h1>
+    <p class="lede">A single rooftop, left to right and nothing else. Drizzle chips at your robes, rain falls on a beat, snow drifts and clumps into wide slabs, and hail comes down like artillery. Dodge it, or cut it. The blade needs 0.35 seconds between swings, so every cut counts.</p>
+    <div class="rank">
+      <b id="menu-level">1</b>
+      <div class="rank-title" id="menu-title">Initiate</div>
+      <div class="bar"><i id="menu-exp"></i></div>
+      <div class="rank-meta label"><span id="menu-exp-text">0 / 48 mastery</span><span id="menu-best"></span></div>
+    </div>
+    <div class="row">
+      <button id="start" class="go" type="button">Step into the weather</button>
+    </div>
+    <div>
+      <div class="label" style="margin-bottom:8px">Stances</div>
+      <div class="stances" id="stances"></div>
+    </div>
+    <div class="keys">
+      <div><kbd>A</kbd><kbd>D</kbd> or arrows · run</div>
+      <div><kbd>Space</kbd> dash roll, untouchable</div>
+      <div><kbd>J</kbd><kbd>K</kbd> or click · slash</div>
+      <div><kbd>F</kbd> focus cut (level 50)</div>
+      <div><kbd>Esc</kbd> pause · <kbd>M</kbd> mute</div>
+      <div>Hail breaks only in the dashed box</div>
+    </div>
+  </div>
+</section>
+
+<section id="pause" class="screen" hidden>
+  <div class="sheet">
+    <h2>Paused</h2>
+    <div class="row">
+      <button id="resume" class="go" type="button">Continue</button>
+      <button id="quit" class="ghost" type="button">End the run</button>
+    </div>
+  </div>
+</section>
+
+<section id="over" class="screen" hidden>
+  <div class="sheet">
+    <div class="eyebrow">Soaked through</div>
+    <h2 id="over-title">The weather won at wave 1</h2>
+    <div id="over-levels"></div>
+    <div class="results">
+      <div><span class="label">Time</span><b id="over-time">0:00</b></div>
+      <div><span class="label">Drops cut</span><b id="over-sliced">0</b></div>
+      <div><span class="label">Clean hail cuts</span><b id="over-perfect">0</b></div>
+      <div><span class="label">Best streak</span><b id="over-combo">0</b></div>
+      <div><span class="label">Mastery</span><b id="over-exp">0</b></div>
+    </div>
+    <div class="row">
+      <button id="again" class="go" type="button">Run it again</button>
+      <button id="to-menu" class="ghost" type="button">Stances</button>
+    </div>
+  </div>
+</section>
+
+<div id="touch" aria-hidden="true">
+  <div><button data-key="left" type="button" aria-label="Run left">◀</button><button data-key="right" type="button" aria-label="Run right">▶</button><button data-key="pause" type="button" aria-label="Pause" class="small">II</button></div>
+  <div><button data-key="dash" type="button">Dash</button><button data-key="slash" type="button">Cut</button><button data-key="focus" type="button" hidden>Focus</button></div>
+</div>
+
+<button id="mute" class="ghost" type="button">Sound on</button>
+<!--SCRIPTS-->
