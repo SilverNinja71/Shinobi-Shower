@@ -1,1 +1,0 @@
-{"cell":192,"columns":8,"metresPerCell":3.4,"feetFromBottom":0.1323529411764706,"strips":{"idle":{"start":0,"count":6},"run":{"start":6,"count":8},"air":{"start":14,"count":4},"slide":{"start":18,"count":4},"dash":{"start":22,"count":4},"cutA":{"start":26,"count":6},"cutB":{"start":32,"count":6},"hurt":{"start":38,"count":4},"wire":{"start":42,"count":2}}}
