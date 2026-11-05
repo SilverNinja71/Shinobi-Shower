@@ -11,7 +11,7 @@ import { StormRenderer } from '../weather/StormRenderer.ts';
 import type { Assets } from './Assets.ts';
 import { PostFX } from './PostFX.ts';
 import type { Quality, RenderContext, RenderModule, SharedUniforms } from './RenderContext.ts';
-import { worldX } from './RenderContext.ts';
+import { worldX, laneX } from './RenderContext.ts';
 import { VFX } from './VFX.ts';
 
 const FOV = 36;
@@ -101,6 +101,27 @@ export class GameRenderer {
 
     this.resize();
     new ResizeObserver(() => this.resize()).observe(container);
+  }
+
+  private readonly raycaster = new THREE.Raycaster();
+  private readonly ndc = new THREE.Vector2();
+  private readonly planeZ0 = new THREE.Plane(new THREE.Vector3(0, 0, 1), 0);
+  private readonly hitVec = new THREE.Vector3();
+
+  /**
+   * Projects a screen pixel coordinate (clientX, clientY) onto the gameplay plane at z = 0,
+   * returning the lane position (x in [0, 36]) and vertical coordinate (y).
+   */
+  screenToGame(clientX: number, clientY: number): { x: number; y: number } {
+    const rect = this.container.getBoundingClientRect();
+    if (rect.width <= 0 || rect.height <= 0) return { x: 18, y: 1.5 };
+    this.ndc.x = ((clientX - rect.left) / rect.width) * 2 - 1;
+    this.ndc.y = -((clientY - rect.top) / rect.height) * 2 + 1;
+    this.raycaster.setFromCamera(this.ndc, this.camera);
+    if (this.raycaster.ray.intersectPlane(this.planeZ0, this.hitVec)) {
+      return { x: laneX(this.hitVec.x), y: this.hitVec.y };
+    }
+    return { x: 18, y: 1.5 };
   }
 
   resize(): void {

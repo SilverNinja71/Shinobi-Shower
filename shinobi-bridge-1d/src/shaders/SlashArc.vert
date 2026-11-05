@@ -16,6 +16,7 @@ uniform float uPivot;      // height of the sweep's centre above the feet
 uniform float uDescend;    // 1: overhead → low front; 0: low front → overhead
 uniform float uArcs;       // 1 or 2
 uniform float uDepth;      // offset toward the camera so the light sits in front of the body
+uniform float uAngle;      // aim angle in radians (pitch above/below horizon)
 
 varying vec2 vArc;
 varying float vSide;
@@ -33,7 +34,16 @@ void main() {
   // A crescent: thickest mid-sweep, pointed at both ends.
   float thick = 0.5 * pow(max(sin(PI * aArc.x), 0.0), 0.7) + 0.04;
   float k = mix(1.0 - thick, 1.0, aArc.y);
-  vec3 p = uOrigin + vec3(side * uReach * cos(a) * k, uPivot + up * sin(a) * k, uDepth);
+  float rx = side * uReach * cos(a) * k;
+  float ry = up * sin(a) * k;
+
+  // Rotate around pivot by aim angle
+  float cosAng = cos(uAngle);
+  float sinAng = sin(uAngle);
+  float rotX = rx * cosAng - (side * ry) * sinAng;
+  float rotY = (side * rx) * sinAng + ry * cosAng;
+
+  vec3 p = uOrigin + vec3(rotX, uPivot + rotY, uDepth);
   // The unused second arc collapses to nothing.
   p = mix(p, uOrigin, second * step(uArcs, 1.5));
   vArc = aArc.xy;

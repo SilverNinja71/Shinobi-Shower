@@ -3,7 +3,7 @@ import type { Game } from '../../core/Game.ts';
 import { worldX } from '../../render/RenderContext.ts';
 import fragmentShader from '../../shaders/SlashArc.frag';
 import vertexShader from '../../shaders/SlashArc.vert';
-import { ACTIVE, STARTUP, WAKE } from '../KatanaSlash.ts';
+import { ACTIVE, STARTUP, WAKE, ARC_LOW, ARC_HIGH } from '../KatanaSlash.ts';
 
 export type SlashStyle = 'steel' | 'spirit' | 'flame' | 'crimson';
 
@@ -38,6 +38,7 @@ export class SlashArcs {
     uSweep: { value: 0 },
     uWake: { value: 0 },
     uStrength: { value: 0 },
+    uAngle: { value: 0 },
   };
   private swing = -1;
 
@@ -101,9 +102,15 @@ export class SlashArcs {
     const s = u.uDescend.value > 0.5 ? x : 1 - x;
     const a = 1.66 + (-1.66 - 1.66) * s;
     const up = a >= 0 ? u.uHigh.value - u.uPivot.value : u.uPivot.value - u.uLow.value;
+    const rx = u.uFacing.value * u.uReach.value * Math.cos(a) * radius;
+    const ry = up * Math.sin(a) * radius;
+    const cosAng = Math.cos(u.uAngle.value);
+    const sinAng = Math.sin(u.uAngle.value);
+    const rotX = rx * cosAng - (u.uFacing.value * ry) * sinAng;
+    const rotY = (u.uFacing.value * rx) * sinAng + ry * cosAng;
     out.copy(u.uOrigin.value);
-    out.x += u.uFacing.value * u.uReach.value * Math.cos(a) * radius;
-    out.y += u.uPivot.value + up * Math.sin(a) * radius;
+    out.x += rotX;
+    out.y += u.uPivot.value + rotY;
     return true;
   }
 
@@ -116,6 +123,7 @@ export class SlashArcs {
     const k = game.katana;
     const u = this.u;
     u.uTime.value += dt;
+    u.uAngle.value = k.aimAngle;
     if (k.t < 0 || game.phase === 'over') {
       this.mesh.visible = false;
       return;
@@ -128,9 +136,9 @@ export class SlashArcs {
       const arcs = k.arcs(w.x, feet, game.stance);
       const a = arcs[0];
       u.uFacing.value = a.side;
-      u.uReach.value = a.side > 0 ? a.x1 - w.x : w.x - a.x0;
-      u.uLow.value = a.y0 - feet;
-      u.uHigh.value = a.y1 - feet;
+      u.uReach.value = k.reach(game.stance);
+      u.uLow.value = ARC_LOW;
+      u.uHigh.value = ARC_HIGH;
       u.uArcs.value = arcs.length;
       u.uDescend.value = slashDescends(k.swing) ? 1 : 0;
       this.mesh.material = this.materials[SlashArcs.styleFor(game)];

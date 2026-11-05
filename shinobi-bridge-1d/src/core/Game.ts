@@ -43,6 +43,8 @@ export interface FrameInput {
   slashPressed: boolean;
   kickPressed: boolean;
   focusPressed: boolean;
+  aimX?: number;
+  aimY?: number;
 }
 
 export const NO_INPUT: FrameInput = { moveX: 0, dashPressed: false, slashPressed: false, kickPressed: false, focusPressed: false };
@@ -302,7 +304,7 @@ export class Game {
       return;
     }
     if (this.phase !== 'playing') return;
-    if (input.slashPressed) this.katana.press();
+    if (input.slashPressed) this.katana.press(input.aimX, input.aimY);
     if (this.hitstop > 0) {
       this.hitstop = Math.max(0, this.hitstop - dt);
       return;
@@ -335,8 +337,9 @@ export class Game {
     }
     if (moved.stumbled) this.events.push({ type: 'stumble', x: w.x });
 
-    const slash = this.katana.update(dt, s, w.facing, w.stun <= 0 && !w.kicking && !w.rolling);
+    const slash = this.katana.update(dt, s, w.facing, w.stun <= 0 && !w.kicking && !w.rolling, w.x, this.feetY + 1.5);
     if (slash === 'start') {
+      w.facing = this.katana.facing;
       for (const arc of this.katana.arcs(w.x, this.feetY, s)) {
         this.events.push({ type: 'slash', x: w.x, y: this.feetY, side: arc.side });
         // A burning edge sweeping low vaporizes the drift it passes over.
@@ -400,7 +403,7 @@ export class Game {
   }
 
   private stepCelestial(dt: number, input: FrameInput): void {
-    if (input.slashPressed) this.katana.press();
+    if (input.slashPressed) this.katana.press(input.aimX, input.aimY);
     if (this.hitstop > 0) {
       this.hitstop = Math.max(0, this.hitstop - dt);
       return;
@@ -422,8 +425,9 @@ export class Game {
     }
     if (moved.stumbled) this.events.push({ type: 'stumble', x: w.x });
 
-    const slash = this.katana.update(dt, s, w.facing, w.stun <= 0 && !w.kicking && !w.rolling);
+    const slash = this.katana.update(dt, s, w.facing, w.stun <= 0 && !w.kicking && !w.rolling, w.x, 1.5);
     if (slash === 'start') {
+      w.facing = this.katana.facing;
       for (const arc of this.katana.arcs(w.x, 0, s)) {
         this.events.push({ type: 'slash', x: w.x, y: 0, side: arc.side });
       }

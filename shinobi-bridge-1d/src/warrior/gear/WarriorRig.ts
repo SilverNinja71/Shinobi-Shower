@@ -458,6 +458,14 @@ export class WarriorRig {
     const leanTarget = this.dead ? 0 : Math.min(0.2, accel * 0.022);
     this.lean += (leanTarget - this.lean) * Math.min(1, dt * 8);
     if (this.lean > 1e-3) b.spine_01.quaternion.multiply(this.q.setFromAxisAngle(X_AXIS, this.lean));
+    // Aimed slash: tilt upper body towards the click aim angle
+    if (game.katana.t >= 0 && this.slashWeight > 0.05 && !this.dead) {
+      const aim = game.katana.aimAngle;
+      const spinePitch = -aim * 0.45 * this.slashWeight;
+      b.spine_01.quaternion.multiply(this.q.setFromAxisAngle(X_AXIS, spinePitch));
+      b.spine_02.quaternion.multiply(this.q.setFromAxisAngle(X_AXIS, spinePitch * 0.5));
+      b.neck_01.quaternion.multiply(this.q.setFromAxisAngle(X_AXIS, spinePitch * 0.35));
+    }
     // A hail strike crushes the warrior down: head and shoulders driven forward, knees buckling.
     const hit = this.hitWeight();
     if (hit > 0) {

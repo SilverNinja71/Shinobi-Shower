@@ -210,6 +210,7 @@ async function boot(): Promise<void> {
   renderer.domElement.id = 'view';
   const assets = await Assets.load(renderer, (p) => screens.showLoading(p));
   view = new GameRenderer(stage, renderer, assets, chooseQuality());
+  input.aimConverter = (cx, cy) => view?.screenToGame(cx, cy) ?? null;
   screens.hideLoading();
 
   const params = new URLSearchParams(location.search);

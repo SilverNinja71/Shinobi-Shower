@@ -35,6 +35,7 @@ export interface Arc {
   y1: number;
   /** Centre of the sweet spot along x. */
   sweet: number;
+  aimAngle?: number;
 }
 
 export class KatanaSlash {
@@ -47,18 +48,38 @@ export class KatanaSlash {
   /** Counts slashes so one swing meets a drop only once. */
   swing = 0;
   facing = 1;
+  /** Current aim angle in radians (elevation above/below horizon). */
+  aimAngle = 0;
+  aimX: number | null = null;
+  aimY: number | null = null;
   /** What this swing's cutting frames have cut or struck. The wake does not count. */
   hits = 0;
   /** Set when a finished swing cut nothing; cleared when the blade is ready. */
   whiffed = false;
   private buffered = 0;
+  private bufferedAimX: number | null = null;
+  private bufferedAimY: number | null = null;
 
-  press(): void {
+  press(aimX?: number, aimY?: number): void {
     this.buffered = BUFFER;
+    if (aimX !== undefined && aimY !== undefined) {
+      this.bufferedAimX = aimX;
+      this.bufferedAimY = aimY;
+    } else {
+      this.bufferedAimX = null;
+      this.bufferedAimY = null;
+    }
   }
 
   /** Advances timers. Returns 'start' when a slash begins and 'whiff' when its cutting frames end having met nothing. */
-  update(dt: number, stance: Stance, facing: number, canSwing: boolean): 'start' | 'whiff' | null {
+  update(
+    dt: number,
+    stance: Stance,
+    facing: number,
+    canSwing: boolean,
+    warriorX = 0,
+    shoulderY = 1.5,
+  ): 'start' | 'whiff' | null {
     let result: 'start' | 'whiff' | null = null;
     if (this.t >= 0) {
       const before = this.t;
@@ -76,10 +97,26 @@ export class KatanaSlash {
     if (this.buffered > 0 && this.cooldown === 0 && canSwing) {
       this.t = 0;
       this.cooldown = this.cooldownLength = stance.cooldown;
-      this.facing = facing;
+      if (this.bufferedAimX !== null && this.bufferedAimY !== null) {
+        this.aimX = this.bufferedAimX;
+        this.aimY = this.bufferedAimY;
+        const dx = this.aimX - warriorX;
+        this.facing = dx >= 0 ? 1 : -1;
+        const dy = this.aimY - shoulderY;
+        this.aimAngle = Math.atan2(dy, Math.max(0.1, Math.abs(dx)));
+        // Clamp elevation angle to a wide natural swinging range (-75° to +85°)
+        this.aimAngle = Math.max(-1.3, Math.min(1.48, this.aimAngle));
+      } else {
+        this.aimX = null;
+        this.aimY = null;
+        this.aimAngle = 0;
+        this.facing = facing;
+      }
       this.swing++;
       this.hits = 0;
       this.buffered = 0;
+      this.bufferedAimX = null;
+      this.bufferedAimY = null;
       result = 'start';
     }
     this.buffered = Math.max(0, this.buffered - dt);
@@ -125,10 +162,27 @@ export class KatanaSlash {
   arcs(x: number, feetY: number, stance: Stance, facing = this.facing): Arc[] {
     const reach = this.reach(stance);
     const sides = stance.triple ? [facing, -facing] : [facing];
+    const angle = this.aimAngle;
+    const cosA = Math.cos(angle);
+    const sinA = Math.sin(angle);
+    const pivotY = feetY + 1.5;
+
     return sides.map((side) => {
-      const near = x - side * 0.3;
-      const far = x + side * reach;
-      return { side, x0: Math.min(near, far), x1: Math.max(near, far), y0: feetY + ARC_LOW, y1: feetY + ARC_HIGH, sweet: x + side * reach * 0.62 };
+      const reachX = side * reach * Math.max(0.35, cosA);
+      const reachY = reach * 0.75 * sinA;
+
+      const x0 = Math.min(x - side * 0.4, x + reachX);
+      const x1 = Math.max(x - side * 0.4, x + reachX);
+
+      const baseSpan = ARC_HIGH - ARC_LOW;
+      const midY = pivotY + reachY;
+      const halfSpan = baseSpan * 0.5 + Math.abs(reachY) * 0.4;
+
+      const y0 = Math.min(feetY + ARC_LOW, midY - halfSpan);
+      const y1 = Math.max(feetY + ARC_HIGH, midY + halfSpan);
+
+      const sweet = x + side * reach * 0.62 * Math.max(0.35, cosA);
+      return { side, x0, x1, y0, y1, sweet, aimAngle: angle };
     });
   }
 
@@ -138,5 +192,10 @@ export class KatanaSlash {
     this.hits = 0;
     this.whiffed = false;
     this.buffered = 0;
+    this.aimX = null;
+    this.aimY = null;
+    this.aimAngle = 0;
+    this.bufferedAimX = null;
+    this.bufferedAimY = null;
   }
 }

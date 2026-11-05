@@ -325,6 +325,9 @@ export class CelestialBattle {
     const reachMult = this.lightBladeActive ? LIGHT_BLADE_REACH_MULTIPLIER : 1.0;
     const arcs = katana.arcs(warrior.x, CLOUD_DECK_Y, stance);
     const damagePerHit = (this.lightBladeActive ? 2 : 1) + (stance.flame ? 1 : 0);
+    const shoulderX = warrior.x;
+    const shoulderY = CLOUD_DECK_Y + 1.5;
+    const baseReach = katana.reach(stance) * reachMult;
 
     for (const rawArc of arcs) {
       // Scale arc reach if Light Blade is active
@@ -338,7 +341,18 @@ export class CelestialBattle {
       // Hit test against Demons
       for (const d of this.demons) {
         if (!d.alive) continue;
-        if (d.x + d.radius >= arcX0 && d.x - d.radius <= arcX1 && d.y + d.radius >= arcY0 && d.y - d.radius <= arcY1) {
+        const inBox = d.x + d.radius >= arcX0 && d.x - d.radius <= arcX1 && d.y + d.radius >= arcY0 && d.y - d.radius <= arcY1;
+
+        // Radial cone check towards clicked direction
+        const dx = d.x - shoulderX;
+        const dy = d.y - shoulderY;
+        const dist = Math.hypot(dx, dy);
+        const inCone = dist <= baseReach + d.radius + 0.4 && (dx * rawArc.side) > -0.2 && Math.abs(Math.atan2(dy, Math.max(0.01, dx * rawArc.side)) - (katana.aimAngle ?? 0)) < 0.85;
+
+        // Direct aim target test when clicked right on or near the demon
+        const nearClick = katana.aimX !== null && katana.aimY !== null && Math.hypot(d.x - katana.aimX, d.y - katana.aimY) <= d.radius + 1.2 && dist <= baseReach + 1.2;
+
+        if (inBox || inCone || nearClick) {
           d.health -= damagePerHit;
           // Knockback
           d.vx = rawArc.side * 7.0;
@@ -356,7 +370,13 @@ export class CelestialBattle {
       // Hit test against Angels (Accidental strike penalty!)
       for (const a of this.angels) {
         if (!a.alive) continue;
-        if (a.x + a.radius >= arcX0 && a.x - a.radius <= arcX1 && a.y + a.radius >= arcY0 && a.y - a.radius <= arcY1) {
+        const inBox = a.x + a.radius >= arcX0 && a.x - a.radius <= arcX1 && a.y + a.radius >= arcY0 && a.y - a.radius <= arcY1;
+        const dx = a.x - shoulderX;
+        const dy = a.y - shoulderY;
+        const dist = Math.hypot(dx, dy);
+        const inCone = dist <= baseReach + a.radius + 0.3 && (dx * rawArc.side) > -0.2 && Math.abs(Math.atan2(dy, Math.max(0.01, dx * rawArc.side)) - (katana.aimAngle ?? 0)) < 0.75;
+
+        if (inBox || inCone) {
           // Player struck the angel!
           a.alive = false;
           this.stats.angelsStruck++;

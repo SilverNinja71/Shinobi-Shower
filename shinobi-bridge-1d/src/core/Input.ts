@@ -11,8 +11,11 @@ export class Input {
   enabled = false;
   onPause: () => void = () => {};
   onMute: () => void = () => {};
+  aimConverter: ((clientX: number, clientY: number) => { x: number; y: number }) | null = null;
   private readonly held = new Set<string>();
   private readonly pressed = { dash: false, slash: false, kick: false, focus: false };
+  private targetAimX: number | undefined = undefined;
+  private targetAimY: number | undefined = undefined;
 
   constructor(stage: HTMLElement) {
     addEventListener('keydown', (e) => this.keyDown(e));
@@ -21,8 +24,16 @@ export class Input {
     stage.addEventListener('mousedown', (e) => {
       if (!this.enabled) return;
       e.preventDefault();
-      if (e.button === 0) this.press('slash');
-      else if (e.button === 2) this.press('dash');
+      if (e.button === 0) {
+        if (this.aimConverter) {
+          const pt = this.aimConverter(e.clientX, e.clientY);
+          this.targetAimX = pt.x;
+          this.targetAimY = pt.y;
+        }
+        this.press('slash');
+      } else if (e.button === 2) {
+        this.press('dash');
+      }
     });
     stage.addEventListener('contextmenu', (e) => e.preventDefault());
   }
@@ -72,6 +83,7 @@ export class Input {
   clear(): void {
     this.held.clear();
     this.pressed.dash = this.pressed.slash = this.pressed.kick = this.pressed.focus = false;
+    this.targetAimX = this.targetAimY = undefined;
   }
 
   sample(): FrameInput {
@@ -83,8 +95,11 @@ export class Input {
       slashPressed: this.pressed.slash,
       kickPressed: this.pressed.kick,
       focusPressed: this.pressed.focus,
+      aimX: this.targetAimX,
+      aimY: this.targetAimY,
     };
     this.pressed.dash = this.pressed.slash = this.pressed.kick = this.pressed.focus = false;
+    this.targetAimX = this.targetAimY = undefined;
     return out;
   }
 }

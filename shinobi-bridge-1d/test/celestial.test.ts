@@ -144,3 +144,46 @@ test('Celestial battle: Striking an Angel cancels Light Blade and inflicts holy 
   assert.ok(battle.holyBlindnessTimer > 0, 'holy blindness triggered');
   assert.ok(battle.events.some((e) => e.type === 'angel_struck'));
 });
+
+test('Omnidirectional click aiming hits aerial demons high above warrior', () => {
+  const battle = new CelestialBattle();
+  battle.start(0);
+
+  // Spawn a demon high up at y = 4.0
+  const demon = battle.spawnDemon('imp');
+  demon.x = 2.0;
+  demon.y = 4.0;
+  demon.health = 1;
+
+  const warrior = new WarriorController();
+  warrior.x = 0.5;
+  warrior.facing = 1;
+  const katana = new KatanaSlash();
+  const stance = stanceFor(50);
+
+  // Click aim directly at the aerial demon
+  katana.press(demon.x, demon.y);
+  katana.update(0.01, stance, warrior.facing, true, warrior.x, 1.5);
+  assert.ok(katana.aimAngle > 0.5, 'aim angle points upward towards high demon');
+
+  katana.update(0.08, stance, warrior.facing, true, warrior.x, 1.5);
+  assert.ok(katana.cutting);
+
+  battle.update(0.05, warrior, katana, stance);
+  assert.equal(demon.alive, false, 'high aerial demon was hit and slain by aimed slash');
+  assert.equal(battle.stats.demonsSlain, 1);
+});
+
+test('Click aiming to the opposite side immediately faces that direction', () => {
+  const katana = new KatanaSlash();
+  const stance = stanceFor(1);
+
+  // Warrior currently facing right (+1)
+  // Player clicks to the left at x = -5, y = 2
+  katana.press(-5, 2);
+  katana.update(0.01, stance, 1, true, 0, 1.5);
+
+  assert.equal(katana.facing, -1, 'katana turned to face the left click');
+  assert.equal(katana.aimX, -5);
+  assert.equal(katana.aimY, 2);
+});
