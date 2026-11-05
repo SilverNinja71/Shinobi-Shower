@@ -487,8 +487,13 @@ export class WarriorRig {
     const lift = depth > 0.08 ? depth - Math.min(depth, 0.05 + depth * 0.45) : depth * 0.4;
     // Buckled knees lower the hips; drop the body with them so the feet stay on the planks.
     const stagger = -0.07 * this.hitWeight();
-    this.root.position.set(worldX(x), b.deckY(x) + lift + stagger, b.lateral(x));
-    this.root.rotation.set(b.rollAt(x) * 0.6, 0, b.pitch(x) * 0.18);
+    const isCelestial = game.phase === 'celestial';
+    const deckY = isCelestial ? 0.05 : b.deckY(x);
+    const roll = isCelestial ? 0 : b.rollAt(x) * 0.6;
+    const pitch = isCelestial ? 0 : b.pitch(x) * 0.18;
+    const lateral = isCelestial ? 0 : b.lateral(x);
+    this.root.position.set(worldX(x), deckY + (isCelestial ? 0 : lift + stagger), lateral);
+    this.root.rotation.set(roll, 0, pitch);
 
     const facing = this.facingFor(game);
     const step = dt / TURN_TIME;

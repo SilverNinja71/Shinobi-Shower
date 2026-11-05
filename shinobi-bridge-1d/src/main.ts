@@ -235,6 +235,28 @@ async function boot(): Promise<void> {
       if (params.has('x')) game.warrior.x = Number(params.get('x'));
       if (params.get('freeze') === '1') debug.frozen = true;
       if (params.get('invincible') === '1') setInterval(() => (game.dryness = 100), 250);
+      if (params.get('cutscene') === '1') {
+        game.triggerAtomicCleave();
+        if (params.has('cuttime')) {
+          game.cutscene.time = Number(params.get('cuttime'));
+          game.cutscene.update(0.01);
+        }
+      }
+      if (params.get('celestial') === '1') {
+        game.triggerAtomicCleave();
+        game.cutscene.time = 7.0;
+        game.cutscene.update(0.1);
+        game.phase = 'celestial';
+        game.celestial.start(game.warrior.x);
+        game.events.push({ type: 'celestial_start' });
+        game.celestial.spawnDemon('imp', game.warrior.x + 4.2, 3.8);
+        game.celestial.spawnDemon('drake', game.warrior.x - 4.8, 5.0);
+        const ang = game.celestial.spawnAngel(game.warrior.x + 2.0);
+        ang.y = 1.6;
+        if (params.get('lightblade') === '1') {
+          game.celestial.lightBladeTimer = 10;
+        }
+      }
     } else {
       screens.showMenu(game, save);
     }

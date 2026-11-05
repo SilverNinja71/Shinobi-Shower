@@ -207,12 +207,12 @@ export class GameRenderer {
       const leadTarget = w.facing * 1.5 + w.vx * 0.18;
       this.lead += (leadTarget - this.lead) * Math.min(1, dt * 1.6);
       const x = worldX(w.x) + this.lead;
-      const y = 3.2;
+      const y = 2.2;
       const k = Math.min(1, dt * 3.5);
       this.focus.x += (x - this.focus.x) * k;
       this.focus.y += (y - this.focus.y) * k;
-      cam.position.set(this.focus.x + sx, this.focus.y + sy, 19.0);
-      this.look.set(this.focus.x, this.focus.y + 0.2, 0);
+      cam.position.set(this.focus.x + sx, this.focus.y + sy, 18.0);
+      this.look.set(this.focus.x, 2.0, 0);
       cam.lookAt(this.look);
       cam.rotateZ((Math.sin(t * 23.0) * a) * 0.02);
       return;

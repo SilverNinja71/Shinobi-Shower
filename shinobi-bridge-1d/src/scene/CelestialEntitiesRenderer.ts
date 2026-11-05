@@ -99,149 +99,255 @@ export class CelestialEntitiesRenderer implements RenderModule {
 
   private buildDemonMesh(): DemonVisual {
     const root = new THREE.Group();
+    const slatePbr = this.ctx.assets.pbr('slate', 2, 2);
+    const leatherPbr = this.ctx.assets.pbr('leather', 1.5, 1.5);
 
-    // Body: Dark jagged shadowy torso
-    const bodyGeo = new THREE.ConeGeometry(0.45, 1.2, 5);
+    // Body: Textured dark volcanic slate exoskeleton
+    const bodyGeo = new THREE.ConeGeometry(0.5, 1.4, 7);
     const bodyMat = new THREE.MeshStandardMaterial({
-      color: 0x140a18,
-      roughness: 0.6,
-      metalness: 0.4,
-      emissive: 0x180006,
+      color: 0x221526,
+      map: slatePbr.map,
+      normalMap: slatePbr.normalMap,
+      roughnessMap: slatePbr.roughnessMap,
+      roughness: 0.65,
+      metalness: 0.35,
+      emissive: 0x1f0612,
+      emissiveIntensity: 0.4,
     });
     const body = new THREE.Mesh(bodyGeo, bodyMat);
     body.rotation.x = Math.PI;
     root.add(body);
 
+    // Glowing Molten Demonic Core (chest)
+    const coreGeo = new THREE.SphereGeometry(0.18, 12, 12);
+    const coreMat = new THREE.MeshBasicMaterial({ color: 0xff3300 });
+    const core = new THREE.Mesh(coreGeo, coreMat);
+    core.position.set(0, 0.1, 0.25);
+    root.add(core);
+
     // Horned Head
-    const headGeo = new THREE.SphereGeometry(0.32, 8, 8);
+    const headGeo = new THREE.DodecahedronGeometry(0.35, 1);
     const head = new THREE.Mesh(headGeo, bodyMat);
-    head.position.y = 0.55;
+    head.position.y = 0.65;
     root.add(head);
 
     // Glowing Crimson Eyes
-    const eyesGeo = new THREE.BoxGeometry(0.24, 0.08, 0.1);
+    const eyesGeo = new THREE.BoxGeometry(0.26, 0.09, 0.12);
     const eyesMat = new THREE.MeshBasicMaterial({ color: 0xff1122 });
     const eyes = new THREE.Mesh(eyesGeo, eyesMat);
-    eyes.position.set(0, 0.55, 0.28);
+    eyes.position.set(0, 0.68, 0.3);
     root.add(eyes);
 
-    // Horns
-    const hornGeo = new THREE.ConeGeometry(0.08, 0.5, 4);
-    const hornMat = new THREE.MeshStandardMaterial({ color: 0x3a0812, emissive: 0x550011 });
-    const hornL = new THREE.Mesh(hornGeo, hornMat);
-    hornL.position.set(-0.2, 0.85, 0);
-    hornL.rotation.z = 0.4;
-    const hornR = new THREE.Mesh(hornGeo, hornMat);
-    hornR.position.set(0.2, 0.85, 0);
-    hornR.rotation.z = -0.4;
-    root.add(hornL, hornR);
+    // Menacing Curved Horns
+    const hornMat = new THREE.MeshStandardMaterial({
+      color: 0x1a060d,
+      emissive: 0xff2200,
+      emissiveIntensity: 0.7,
+      roughness: 0.3,
+    });
+    for (const side of [-1, 1]) {
+      const hornCurve = new THREE.CatmullRomCurve3([
+        new THREE.Vector3(side * 0.15, 0.85, 0.05),
+        new THREE.Vector3(side * 0.45, 1.15, -0.05),
+        new THREE.Vector3(side * 0.35, 1.45, -0.2),
+      ]);
+      const hornGeo = new THREE.TubeGeometry(hornCurve, 12, 0.07, 6, false);
+      const horn = new THREE.Mesh(hornGeo, hornMat);
+      root.add(horn);
+    }
 
-    // Bat Wings (left & right pivoting groups)
-    const wingMat = new THREE.MeshStandardMaterial({
-      color: 0x240c1e,
+    // Spiked Pauldrons (Shoulders)
+    const pauldronGeo = new THREE.ConeGeometry(0.2, 0.4, 4);
+    for (const side of [-1, 1]) {
+      const p = new THREE.Mesh(pauldronGeo, bodyMat);
+      p.position.set(side * 0.48, 0.45, 0);
+      p.rotation.z = -side * 0.8;
+      root.add(p);
+    }
+
+    // Articulated Bat Wings with leather PBR membranes & bone struts
+    const wingBoneMat = new THREE.MeshStandardMaterial({
+      color: 0x180d1e,
+      roughness: 0.5,
+    });
+    const wingMembraneMat = new THREE.MeshStandardMaterial({
+      color: 0x3d152b,
+      map: leatherPbr.map,
+      normalMap: leatherPbr.normalMap,
+      roughnessMap: leatherPbr.roughnessMap,
       roughness: 0.7,
       side: THREE.DoubleSide,
+      transparent: true,
+      opacity: 0.95,
     });
-    const wingGeo = new THREE.BufferGeometry();
-    const wingVertices = new Float32Array([
-      0, 0, 0,
-      -1.4, 0.6, 0.1,
-      -1.8, -0.4, 0,
-      0, 0, 0,
-      -1.8, -0.4, 0,
-      -0.8, -0.8, -0.1
-    ]);
-    wingGeo.setAttribute('position', new THREE.BufferAttribute(wingVertices, 3));
-    wingGeo.computeVertexNormals();
 
-    const leftWing = new THREE.Group();
-    leftWing.position.set(-0.25, 0.3, 0);
-    const lMesh = new THREE.Mesh(wingGeo, wingMat);
-    leftWing.add(lMesh);
-    root.add(leftWing);
+    const createBatWing = (isLeft: boolean) => {
+      const wingRoot = new THREE.Group();
+      wingRoot.position.set(isLeft ? -0.28 : 0.28, 0.35, -0.05);
 
-    const rightWing = new THREE.Group();
-    rightWing.position.set(0.25, 0.3, 0);
-    const rMesh = new THREE.Mesh(wingGeo, wingMat);
-    rMesh.scale.x = -1;
-    rightWing.add(rMesh);
-    root.add(rightWing);
+      // Main arm bone
+      const armGeo = new THREE.CylinderGeometry(0.045, 0.06, 1.4, 6);
+      const arm = new THREE.Mesh(armGeo, wingBoneMat);
+      arm.position.set(isLeft ? -0.7 : 0.7, 0.4, 0);
+      arm.rotation.z = isLeft ? 0.7 : -0.7;
+      wingRoot.add(arm);
+
+      // 3 Finger struts
+      const fingerGeo = new THREE.CylinderGeometry(0.02, 0.035, 1.3, 5);
+      const angles = isLeft ? [-0.2, 0.3, 0.8] : [0.2, -0.3, -0.8];
+      for (let i = 0; i < 3; i++) {
+        const finger = new THREE.Mesh(fingerGeo, wingBoneMat);
+        finger.position.set(isLeft ? -1.3 : 1.3, 0.7 - i * 0.4, 0);
+        finger.rotation.z = angles[i];
+        wingRoot.add(finger);
+      }
+
+      // Spanned webbed membrane
+      const s = isLeft ? -1 : 1;
+      const memGeo = new THREE.BufferGeometry();
+      const memVerts = new Float32Array([
+        0, 0, 0,
+        s * 1.5, 0.9, 0.1,
+        s * 2.2, 0.1, 0,
+        0, 0, 0,
+        s * 2.2, 0.1, 0,
+        s * 1.6, -0.7, -0.1,
+        0, 0, 0,
+        s * 1.6, -0.7, -0.1,
+        s * 0.8, -0.9, 0,
+      ]);
+      memGeo.setAttribute('position', new THREE.BufferAttribute(memVerts, 3));
+      memGeo.computeVertexNormals();
+      const membrane = new THREE.Mesh(memGeo, wingMembraneMat);
+      wingRoot.add(membrane);
+
+      return wingRoot;
+    };
+
+    const leftWing = createBatWing(true);
+    const rightWing = createBatWing(false);
+    root.add(leftWing, rightWing);
 
     return { mesh: root, leftWing, rightWing, eyes, alive: false };
   }
 
   private buildAngelMesh(): AngelVisual {
     const root = new THREE.Group();
+    const burlapPbr = this.ctx.assets.pbr('burlap', 2, 3);
 
-    // Body: Seraphic flowing white/gold robe
-    const bodyGeo = new THREE.ConeGeometry(0.5, 1.8, 8);
+    // Body: Seraphic flowing white/gold robes with textured weave
+    const bodyGeo = new THREE.ConeGeometry(0.55, 2.0, 12);
     const bodyMat = new THREE.MeshStandardMaterial({
       color: 0xffffff,
-      emissive: 0xffeeaa,
-      emissiveIntensity: 0.4,
-      roughness: 0.3,
+      map: burlapPbr.map,
+      normalMap: burlapPbr.normalMap,
+      roughnessMap: burlapPbr.roughnessMap,
+      roughness: 0.4,
+      metalness: 0.1,
+      emissive: 0xfff2cc,
+      emissiveIntensity: 0.45,
     });
     const body = new THREE.Mesh(bodyGeo, bodyMat);
     root.add(body);
 
+    // Golden Sash / Trim at collar and waist
+    const trimGeo = new THREE.TorusGeometry(0.42, 0.05, 8, 20);
+    const trimMat = new THREE.MeshStandardMaterial({
+      color: 0xf5c842,
+      metalness: 0.85,
+      roughness: 0.25,
+      emissive: 0x997711,
+      emissiveIntensity: 0.6,
+    });
+    const sash = new THREE.Mesh(trimGeo, trimMat);
+    sash.rotation.x = Math.PI / 2;
+    sash.position.y = 0.35;
+    root.add(sash);
+
     // Head
-    const headGeo = new THREE.SphereGeometry(0.28, 12, 12);
-    const head = new THREE.Mesh(headGeo, bodyMat);
-    head.position.y = 1.05;
+    const headGeo = new THREE.SphereGeometry(0.28, 16, 16);
+    const headMat = new THREE.MeshStandardMaterial({
+      color: 0xfff5ea,
+      roughness: 0.5,
+      emissive: 0xfff0dd,
+      emissiveIntensity: 0.3,
+    });
+    const head = new THREE.Mesh(headGeo, headMat);
+    head.position.y = 1.15;
     root.add(head);
 
-    // Radiant Golden Halo
-    const haloGeo = new THREE.TorusGeometry(0.38, 0.05, 8, 24);
+    // Radiant Concentric Golden Halo with Outer Starburst
+    const haloGeo = new THREE.TorusGeometry(0.42, 0.045, 8, 32);
     const haloMat = new THREE.MeshBasicMaterial({ color: 0xffea55 });
     const halo = new THREE.Mesh(haloGeo, haloMat);
     halo.rotation.x = Math.PI / 2;
-    halo.position.y = 1.45;
+    halo.position.y = 1.58;
     root.add(halo);
 
-    // Feathered Angelic Wings
-    const wingMat = new THREE.MeshStandardMaterial({
+    const outerHaloGeo = new THREE.RingGeometry(0.48, 0.54, 16);
+    const outerHaloMat = new THREE.MeshBasicMaterial({
+      color: 0xfffa88,
+      side: THREE.DoubleSide,
+      transparent: true,
+      opacity: 0.7,
+      blending: THREE.AdditiveBlending,
+    });
+    const outerHalo = new THREE.Mesh(outerHaloGeo, outerHaloMat);
+    outerHalo.rotation.x = Math.PI / 2;
+    outerHalo.position.y = 1.58;
+    root.add(outerHalo);
+
+    // Multi-tiered Feathered Seraphic Wings (6 distinct fanned feather blades per wing)
+    const featherMat = new THREE.MeshStandardMaterial({
       color: 0xffffff,
-      emissive: 0xfffae0,
-      emissiveIntensity: 0.5,
+      roughness: 0.3,
+      emissive: 0xfffae8,
+      emissiveIntensity: 0.55,
       side: THREE.DoubleSide,
     });
-    const wingGeo = new THREE.BufferGeometry();
-    const wingVertices = new Float32Array([
-      0, 0, 0,
-      -1.6, 1.1, 0.1,
-      -2.0, 0.1, 0,
-      0, 0, 0,
-      -2.0, 0.1, 0,
-      -1.2, -0.7, -0.1
-    ]);
-    wingGeo.setAttribute('position', new THREE.BufferAttribute(wingVertices, 3));
-    wingGeo.computeVertexNormals();
 
-    const leftWing = new THREE.Group();
-    leftWing.position.set(-0.25, 0.6, 0);
-    const lMesh = new THREE.Mesh(wingGeo, wingMat);
-    leftWing.add(lMesh);
-    root.add(leftWing);
+    const createSeraphWing = (isLeft: boolean) => {
+      const wingRoot = new THREE.Group();
+      wingRoot.position.set(isLeft ? -0.28 : 0.28, 0.75, -0.05);
 
-    const rightWing = new THREE.Group();
-    rightWing.position.set(0.25, 0.6, 0);
-    const rMesh = new THREE.Mesh(wingGeo, wingMat);
-    rMesh.scale.x = -1;
-    rightWing.add(rMesh);
-    root.add(rightWing);
+      const s = isLeft ? -1 : 1;
+      // Main wing bone spar
+      const sparGeo = new THREE.CylinderGeometry(0.04, 0.06, 1.8, 6);
+      const spar = new THREE.Mesh(sparGeo, trimMat);
+      spar.position.set(s * 0.8, 0.5, 0);
+      spar.rotation.z = s * 0.85;
+      wingRoot.add(spar);
 
-    // Ascending Light Shaft beneath the angel
-    const beamGeo = new THREE.CylinderGeometry(0.3, 1.2, 12, 12, 1, true);
+      // 6 Individual layered feather blades
+      const featherGeo = new THREE.BoxGeometry(0.18, 1.4, 0.03);
+      for (let i = 0; i < 6; i++) {
+        const feather = new THREE.Mesh(featherGeo, featherMat);
+        const u = i / 5;
+        feather.position.set(s * (0.5 + u * 1.5), 0.7 - u * 1.1, (i % 2) * 0.04);
+        feather.rotation.z = s * (0.6 + u * 0.9);
+        const scale = 1.2 - u * 0.35;
+        feather.scale.set(scale, scale, 1);
+        wingRoot.add(feather);
+      }
+      return wingRoot;
+    };
+
+    const leftWing = createSeraphWing(true);
+    const rightWing = createSeraphWing(false);
+    root.add(leftWing, rightWing);
+
+    // Ascending Divine Light Column
+    const beamGeo = new THREE.CylinderGeometry(0.35, 1.8, 16, 16, 1, true);
     const beamMat = new THREE.MeshBasicMaterial({
       color: 0xfff0aa,
       transparent: true,
-      opacity: 0.25,
+      opacity: 0.28,
       blending: THREE.AdditiveBlending,
       side: THREE.DoubleSide,
       depthWrite: false,
     });
     const lightBeam = new THREE.Mesh(beamGeo, beamMat);
-    lightBeam.position.y = -6.0;
+    lightBeam.position.y = -8.0;
     root.add(lightBeam);
 
     return { mesh: root, leftWing, rightWing, halo, lightBeam, alive: false };
@@ -412,3 +518,4 @@ export class CelestialEntitiesRenderer implements RenderModule {
     }
   }
 }
+

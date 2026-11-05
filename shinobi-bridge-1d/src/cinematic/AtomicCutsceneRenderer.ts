@@ -66,50 +66,76 @@ export class AtomicCutsceneRenderer implements RenderModule {
     this.dropletMesh = new THREE.Mesh(dropletGeo, dropletMat);
     this.atomGroup.add(this.dropletMesh);
 
-    // Nucleus: 14 clustered spheres (protons = ruby/gold, neutrons = cyan/blue)
+    // Nucleus: 18 clustered spheres (protons = ruby/gold, neutrons = cyan/blue)
     const nucleonGeo = new THREE.SphereGeometry(0.24, 16, 16);
     const protonMat = new THREE.MeshStandardMaterial({
       color: 0xff3344,
       emissive: 0xff1122,
-      emissiveIntensity: 0.9,
-      roughness: 0.3,
+      emissiveIntensity: 1.2,
+      roughness: 0.2,
     });
     const neutronMat = new THREE.MeshStandardMaterial({
       color: 0x3399ff,
       emissive: 0x1144ff,
-      emissiveIntensity: 0.9,
-      roughness: 0.3,
+      emissiveIntensity: 1.2,
+      roughness: 0.2,
     });
 
-    for (let i = 0; i < 14; i++) {
+    const tetherPoints: number[] = [];
+    const nucleonPositions: THREE.Vector3[] = [];
+    for (let i = 0; i < 18; i++) {
       const isProton = i % 2 === 0;
       const mesh = new THREE.Mesh(nucleonGeo, isProton ? protonMat : neutronMat);
-      const phi = Math.acos(-1 + (2 * i) / 14);
-      const theta = Math.sqrt(14 * Math.PI) * phi;
-      const r = 0.42 + (Math.random() - 0.5) * 0.12;
-      mesh.position.set(r * Math.cos(theta) * Math.sin(phi), r * Math.sin(theta) * Math.sin(phi), r * Math.cos(phi));
+      const phi = Math.acos(-1 + (2 * i) / 18);
+      const theta = Math.sqrt(18 * Math.PI) * phi;
+      const r = 0.44 + (Math.random() - 0.5) * 0.12;
+      const pos = new THREE.Vector3(r * Math.cos(theta) * Math.sin(phi), r * Math.sin(theta) * Math.sin(phi), r * Math.cos(phi));
+      mesh.position.copy(pos);
+      nucleonPositions.push(pos);
       this.nucleons.push(mesh);
       this.nucleusGroup.add(mesh);
     }
+
+    // Connect close nucleons with glowing subatomic energy tether lines
+    for (let i = 0; i < nucleonPositions.length; i++) {
+      for (let j = i + 1; j < nucleonPositions.length; j++) {
+        if (nucleonPositions[i].distanceTo(nucleonPositions[j]) < 0.62) {
+          tetherPoints.push(
+            nucleonPositions[i].x, nucleonPositions[i].y, nucleonPositions[i].z,
+            nucleonPositions[j].x, nucleonPositions[j].y, nucleonPositions[j].z
+          );
+        }
+      }
+    }
+    const tetherGeo = new THREE.BufferGeometry();
+    tetherGeo.setAttribute('position', new THREE.Float32BufferAttribute(tetherPoints, 3));
+    const tetherMat = new THREE.LineBasicMaterial({
+      color: 0xffeebb,
+      transparent: true,
+      opacity: 0.8,
+      blending: THREE.AdditiveBlending,
+    });
+    const tethers = new THREE.LineSegments(tetherGeo, tetherMat);
+    this.nucleusGroup.add(tethers);
     this.atomGroup.add(this.nucleusGroup);
 
-    // 3 Tilted Electron Orbital Rings with orbiting electron beads
-    const electronGeo = new THREE.SphereGeometry(0.08, 12, 12);
-    const electronMat = new THREE.MeshBasicMaterial({ color: 0xffffaa });
-    const angles = [0, (Math.PI * 2) / 3, (Math.PI * 4) / 3];
+    // 4 Tilted Electron Orbital Rings with orbiting electron beads
+    const electronGeo = new THREE.SphereGeometry(0.09, 12, 12);
+    const electronMat = new THREE.MeshBasicMaterial({ color: 0xffffbb });
+    const angles = [0, Math.PI * 0.5, Math.PI * 0.25, Math.PI * 0.75];
 
-    for (let i = 0; i < 3; i++) {
-      const curve = new THREE.EllipseCurve(0, 0, 1.25, 1.25, 0, 2 * Math.PI, false, 0);
+    for (let i = 0; i < 4; i++) {
+      const curve = new THREE.EllipseCurve(0, 0, 1.35, 1.35, 0, 2 * Math.PI, false, 0);
       const points = curve.getPoints(64);
       const ringGeo = new THREE.BufferGeometry().setFromPoints(points);
       const ringMat = new THREE.LineBasicMaterial({
-        color: 0x77eeff,
+        color: i % 2 === 0 ? 0x77eeff : 0xffaa55,
         transparent: true,
-        opacity: 0.65,
+        opacity: 0.75,
         blending: THREE.AdditiveBlending,
       });
       const ring = new THREE.Line(ringGeo, ringMat);
-      ring.rotation.x = Math.PI * 0.35 + i * 0.25;
+      ring.rotation.x = Math.PI * 0.35 + i * 0.28;
       ring.rotation.y = angles[i];
       this.electronRings.push(ring);
       this.atomGroup.add(ring);
@@ -119,13 +145,14 @@ export class AtomicCutsceneRenderer implements RenderModule {
       this.atomGroup.add(eMesh);
     }
 
-    // Incandescent Katana Blade
-    const bladeGeo = new THREE.BoxGeometry(0.04, 3.2, 0.45);
+    // Incandescent Katana Blade with Etched Glowing Edge
+    const bladeGeo = new THREE.BoxGeometry(0.045, 3.5, 0.45);
     const bladeMat = new THREE.MeshStandardMaterial({
       color: 0xffffff,
       emissive: 0xffeebb,
-      emissiveIntensity: 2.5,
-      roughness: 0.1,
+      emissiveIntensity: 3.0,
+      roughness: 0.08,
+      metalness: 0.9,
     });
     this.bladeMesh = new THREE.Mesh(bladeGeo, bladeMat);
     this.bladeMesh.rotation.z = Math.PI * 0.3;
@@ -134,11 +161,11 @@ export class AtomicCutsceneRenderer implements RenderModule {
 
     // --- Nuclear Detonation FX ---
     // Shockwave Ring
-    const shockGeo = new THREE.TorusGeometry(1, 0.18, 16, 64);
+    const shockGeo = new THREE.TorusGeometry(1, 0.24, 16, 64);
     const shockMat = new THREE.MeshBasicMaterial({
       color: 0xffeedd,
       transparent: true,
-      opacity: 0.9,
+      opacity: 0.95,
       blending: THREE.AdditiveBlending,
       side: THREE.DoubleSide,
     });
@@ -146,12 +173,12 @@ export class AtomicCutsceneRenderer implements RenderModule {
     this.shockwaveMesh.rotation.x = Math.PI / 2;
     this.explosionGroup.add(this.shockwaveMesh);
 
-    // Fireball Sphere
+    // Fireball Sphere with inner plasma core
     const fireGeo = new THREE.SphereGeometry(1, 32, 32);
     const fireMat = new THREE.MeshBasicMaterial({
-      color: 0xff8822,
+      color: 0xff7711,
       transparent: true,
-      opacity: 0.85,
+      opacity: 0.9,
       blending: THREE.AdditiveBlending,
     });
     this.fireballMesh = new THREE.Mesh(fireGeo, fireMat);
@@ -172,9 +199,16 @@ export class AtomicCutsceneRenderer implements RenderModule {
     this.flashQuad.renderOrder = 9999;
     ctx.camera.add(this.flashQuad);
 
-    // Shattered bridge planks
-    const plankGeo = new THREE.BoxGeometry(0.35, 0.12, 1.8);
-    const plankMat = new THREE.MeshStandardMaterial({ color: 0x5a3d28, roughness: 0.8 });
+    // Shattered bridge planks with PBR oak wood textures
+    const plankPbr = ctx.assets.pbr('plank', 1, 1);
+    const plankGeo = new THREE.BoxGeometry(0.38, 0.12, 1.8);
+    const plankMat = new THREE.MeshStandardMaterial({
+      color: 0x5a3d28,
+      map: plankPbr.map,
+      normalMap: plankPbr.normalMap,
+      roughnessMap: plankPbr.roughnessMap,
+      roughness: 0.8,
+    });
     for (let i = 0; i < 36; i++) {
       const mesh = new THREE.Mesh(plankGeo, plankMat);
       this.debrisMeshes.push(mesh);
@@ -377,3 +411,4 @@ export class AtomicCutsceneRenderer implements RenderModule {
     }
   }
 }
+

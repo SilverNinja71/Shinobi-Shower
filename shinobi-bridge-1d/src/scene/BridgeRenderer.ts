@@ -36,6 +36,9 @@ export class BridgeRenderer implements RenderModule {
   }
 
   update(dt: number, game: Game): void {
+    const hidden = game.phase === 'celestial' || (game.phase === 'cutscene' && (game.cutscene.phase === 'explosion' || game.cutscene.phase === 'ascend'));
+    this.group.visible = !hidden;
+    if (hidden) return;
     this.deck.update(game.bridge);
     this.planks.update(game);
     this.anchors.update(dt, game, this.ctx.uniforms.uTime.value);

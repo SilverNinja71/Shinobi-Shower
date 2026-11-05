@@ -157,6 +157,7 @@ export class MountainPeakScene implements RenderModule {
   }
 
   update(dt: number, game: Game): void {
+    if (game.phase === 'celestial') return;
     const u = this.ctx.uniforms;
     const cam = this.ctx.camera;
 
