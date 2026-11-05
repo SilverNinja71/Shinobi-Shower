@@ -19,7 +19,7 @@ await sleep(2000);
 
 const chromePath = '/Applications/Google Chrome.app/Contents/MacOS/Google Chrome';
 
-async function takeScreenshot(url, outputPath, waitMs = 1500) {
+async function takeScreenshot(url, outputPath, waitMs = 1200) {
   console.log(`Capturing: ${url} -> ${outputPath}`);
   const args = [
     '--headless=new',
@@ -43,37 +43,37 @@ async function takeScreenshot(url, outputPath, waitMs = 1500) {
 }
 
 try {
-  // 1. Atomic Cleave: Macro zoom on Water Droplet & Nucleus
+  // 1. Atomic Cleave: Macro zoom on Water Droplet & Quantum Nucleus
   await takeScreenshot(
-    'http://localhost:5210/?autostart=1&cutscene=1&cuttime=2.4',
+    'http://localhost:5210/?autostart=1&cutscene=1&cuttime=2.2&freeze=1',
     `${artifactDir}/atomic_cleave_nucleus.png`,
-    1500
+    1200
   );
 
-  // 2. Atomic Cleave: The Fission Slice
+  // 2. Atomic Cleave: The Fission Katana Slice
   await takeScreenshot(
-    'http://localhost:5210/?autostart=1&cutscene=1&cuttime=3.5',
+    'http://localhost:5210/?autostart=1&cutscene=1&cuttime=3.3&freeze=1',
     `${artifactDir}/atomic_cleave_slice.png`,
-    1500
+    1200
   );
 
   // 3. Atomic Cleave: Nuclear Fireball & Bridge Shatter
   await takeScreenshot(
-    'http://localhost:5210/?autostart=1&cutscene=1&cuttime=5.2',
+    'http://localhost:5210/?autostart=1&cutscene=1&cuttime=5.2&freeze=1',
     `${artifactDir}/atomic_cleave_explosion.png`,
-    1500
+    1200
   );
 
-  // 4. Celestial Clash: Golden Cloud Arena with Demon & Angel & Light Blade
+  // 4. Celestial Clash: Golden Cloud Arena with Sculpted Demon & 6-Winged Seraph
   await takeScreenshot(
-    'http://localhost:5210/?autostart=1&celestial=1&lightblade=1',
+    'http://localhost:5210/?autostart=1&celestial=1',
     `${artifactDir}/celestial_clash_battle.png`,
-    2000
+    1200
   );
 
   console.log('All screenshots captured successfully!');
 } catch (err) {
-  console.error('Error during capture:', err);
+  console.error('Capture failed:', err);
 } finally {
   server.kill();
   process.exit(0);

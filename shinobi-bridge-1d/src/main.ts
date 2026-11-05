@@ -238,8 +238,19 @@ async function boot(): Promise<void> {
       if (params.get('cutscene') === '1') {
         game.triggerAtomicCleave();
         if (params.has('cuttime')) {
-          game.cutscene.time = Number(params.get('cuttime'));
-          game.cutscene.update(0.01);
+          const targetTime = Number(params.get('cuttime'));
+          game.cutscene.time = 0;
+          let t = 0;
+          while (t < targetTime) {
+            const dt = Math.min(0.04, targetTime - t);
+            t += dt;
+            game.cutscene.update(dt);
+            for (const ev of game.cutscene.events) {
+              if (ev.type === 'atomic_fission') game.events.push({ type: 'atomic_fission', time: ev.time, x: ev.x, y: ev.y });
+              if (ev.type === 'bridge_shatter') game.events.push({ type: 'bridge_collapse', time: ev.time, x: ev.x, y: ev.y });
+            }
+            game.cutscene.events.length = 0;
+          }
         }
       }
       if (params.get('celestial') === '1') {

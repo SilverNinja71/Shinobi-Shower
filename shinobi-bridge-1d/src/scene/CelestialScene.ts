@@ -2,9 +2,14 @@ import * as THREE from 'three';
 import type { Game, GameEvent } from '../core/Game.ts';
 import type { RenderContext, RenderModule } from '../render/RenderContext.ts';
 
+import cloudVert from '../shaders/VolumetricClouds.vert';
+import cloudFrag from '../shaders/VolumetricClouds.frag';
+
 /**
- * The Heavenly Realm: High above the storm clouds, a radiant golden sea of clouds
- * illuminated by divine sunlight and crepuscular god rays, with floating sacred pillars.
+ * The Heavenly Realm (Celestial Clash):
+ * High above the mortal storm, a majestic anime-style golden sea of clouds (雲海)
+ * illuminated by a warm divine sun, deep twilight skies, floating vermilion Torii gates,
+ * and glowing sacred stone lanterns.
  */
 export class CelestialScene implements RenderModule {
   private readonly ctx: RenderContext;
@@ -13,18 +18,23 @@ export class CelestialScene implements RenderModule {
   // Celestial Environment Lighting
   private readonly sunLight: THREE.DirectionalLight;
   private readonly ambientHemi: THREE.HemisphereLight;
+  private readonly sunDisc: THREE.Mesh;
+  private readonly sunHalo: THREE.Mesh;
 
-  // Cloud floor meshes
-  private readonly cloudDiscs: THREE.Mesh[] = [];
+  // Cloud floor meshes and custom volumetric cloud shader
+  private readonly cloudMaterial: THREE.ShaderMaterial;
   private readonly cloudBillows: THREE.Mesh[] = [];
 
-  // Divine Sunbeams / God Rays
+  // Soft Crepuscular God Rays
   private readonly godRays: THREE.Mesh[] = [];
 
-  // Floating sacred pillar fragments
-  private readonly floatingPillars: THREE.Mesh[] = [];
+  // Distant Holy Mountain Silhouettes
+  private readonly mountainSilhouettes: THREE.Mesh[] = [];
 
-  // Golden stardust / divine motes
+  // Floating sacred Torii gates & lanterns
+  private readonly floatingStructures: THREE.Group[] = [];
+
+  // Golden stardust / divine sakura motes
   private readonly motes: THREE.Points;
   private readonly motePositions: Float32Array;
 
@@ -37,164 +47,213 @@ export class CelestialScene implements RenderModule {
     ctx.scene.add(this.group);
     this.group.visible = false;
 
-    // Divine Sunlight
+    // 1. Divine Sunlight & Ambient Fill
     this.sunLight = new THREE.DirectionalLight(0xffeedd, 2.0);
-    this.sunLight.position.set(-15, 30, 20);
+    this.sunLight.position.set(-22, 28, 20);
     this.group.add(this.sunLight);
 
-    // Warm Golden Skylight & cloud bounce
-    this.ambientHemi = new THREE.HemisphereLight(0xffbe66, 0x663311, 1.0);
+    // Warm golden sky light with deep twilight dusk bounce
+    this.ambientHemi = new THREE.HemisphereLight(0xffc277, 0x3d1b28, 1.1);
     this.group.add(this.ambientHemi);
 
-    // --- Golden Cloud Floor ---
-    // Multi-layered billowy cloud deck
-    const cloudMat = new THREE.MeshStandardMaterial({
-      color: 0xdb883e,
-      roughness: 0.85,
-      metalness: 0.1,
-      flatShading: true,
+    // 2. Radiant Sun Disc & Multi-tier Golden Halo
+    const sunGeo = new THREE.CircleGeometry(4.8, 32);
+    const sunMat = new THREE.MeshBasicMaterial({
+      color: 0xfffae8,
+      side: THREE.DoubleSide,
+      depthWrite: false,
     });
+    this.sunDisc = new THREE.Mesh(sunGeo, sunMat);
+    this.sunDisc.position.set(-36, 26, -55);
+    this.group.add(this.sunDisc);
 
-    // Cloud floor base planes (forming the walking surface at y = 0)
-    for (let i = 0; i < 7; i++) {
-      const geo = new THREE.CylinderGeometry(8 + (i % 3) * 3, 9 + (i % 3) * 3, 1.0, 16);
-      const mesh = new THREE.Mesh(geo, cloudMat);
-      mesh.position.set((i - 3) * 10, -0.5, (Math.random() - 0.5) * 4);
-      mesh.scale.set(1.4, 1.0, 1.2);
-      this.cloudDiscs.push(mesh);
-      this.group.add(mesh);
-    }
-
-    // Billowy cloud domes rolling beneath and behind the warrior
-    const billowGeo = new THREE.SphereGeometry(2.0, 16, 14);
-    for (let i = 0; i < 28; i++) {
-      const mesh = new THREE.Mesh(billowGeo, cloudMat);
-      mesh.position.set(
-        (Math.random() - 0.5) * 55,
-        -2.0 + (Math.random() - 0.5) * 0.4,
-        -6 + Math.random() * 4
-      );
-      const s = 1.0 + Math.random() * 1.4;
-      mesh.scale.set(s * 1.5, s * 0.7, s * 1.2);
-      this.cloudBillows.push(mesh);
-      this.group.add(mesh);
-    }
-
-    // --- Divine God Rays (Crepuscular Beams) ---
-    const rayGeo = new THREE.CylinderGeometry(0.3, 3.5, 35, 16, 1, true);
-    const rayMat = new THREE.MeshBasicMaterial({
-      color: 0xffea99,
+    const haloGeo = new THREE.RingGeometry(4.8, 22.0, 32);
+    const haloMat = new THREE.MeshBasicMaterial({
+      color: 0xffb844,
       transparent: true,
-      opacity: 0.16,
+      opacity: 0.28,
       blending: THREE.AdditiveBlending,
       side: THREE.DoubleSide,
       depthWrite: false,
     });
-    for (let i = 0; i < 6; i++) {
+    this.sunHalo = new THREE.Mesh(haloGeo, haloMat);
+    this.sunHalo.position.copy(this.sunDisc.position);
+    this.group.add(this.sunHalo);
+
+    // 3. Volumetric Golden Cloud Ocean (Custom GLSL Shader)
+    this.cloudMaterial = new THREE.ShaderMaterial({
+      vertexShader: cloudVert,
+      fragmentShader: cloudFrag,
+      uniforms: {
+        uTime: { value: 0 },
+        uSunDir: { value: new THREE.Vector3(-0.6, 0.7, 0.4).normalize() },
+        uSunColor: { value: new THREE.Color(0xffcc66) }, // Warm solar gold
+        uCloudBaseColor: { value: new THREE.Color(0xd9752d) }, // Rich apricot gold
+        uCloudShadowColor: { value: new THREE.Color(0x381422) }, // Deep dusk violet shadow
+      },
+      side: THREE.FrontSide,
+    });
+
+    // Walking cloud deck (overlapping smooth domes forming a solid walking deck at y = 0)
+    const baseCloudGeo = new THREE.SphereGeometry(3.5, 24, 20);
+    for (let i = 0; i < 44; i++) {
+      const mesh = new THREE.Mesh(baseCloudGeo, this.cloudMaterial);
+      const x = (i - 22) * 2.8 + (Math.random() - 0.5) * 1.5;
+      const y = -2.85 + (Math.random() - 0.5) * 0.35;
+      const z = (Math.random() - 0.5) * 12;
+      mesh.position.set(x, y, z);
+      const sx = 1.35 + Math.random() * 0.5;
+      const sy = 0.8 + Math.random() * 0.25;
+      const sz = 1.25 + Math.random() * 0.45;
+      mesh.scale.set(sx, sy, sz);
+      this.cloudBillows.push(mesh);
+      this.group.add(mesh);
+    }
+
+    // Distant background cloud banks
+    const bgCloudGeo = new THREE.SphereGeometry(7.5, 16, 14);
+    for (let i = 0; i < 26; i++) {
+      const mesh = new THREE.Mesh(bgCloudGeo, this.cloudMaterial);
+      const x = (i - 13) * 8.0 + (Math.random() - 0.5) * 4;
+      const y = -6.2 + Math.random() * 1.5;
+      const z = -28 - Math.random() * 18;
+      mesh.position.set(x, y, z);
+      mesh.scale.set(1.7, 0.85, 1.35);
+      this.cloudBillows.push(mesh);
+      this.group.add(mesh);
+    }
+
+    // 4. Distant Holy Mountain Silhouettes (Deep Sapphire / Indigo with golden rim)
+    const slatePbr = ctx.assets.pbr('slate', 2, 2);
+    const mtnGeo = new THREE.ConeGeometry(16, 26, 4);
+    const mtnMat = new THREE.MeshStandardMaterial({
+      color: 0x161828, // Deep night sapphire
+      map: slatePbr.map,
+      normalMap: slatePbr.normalMap,
+      roughness: 0.85,
+      metalness: 0.1,
+    });
+    for (const xOff of [-48, 42, -18, 64]) {
+      const mtn = new THREE.Mesh(mtnGeo, mtnMat);
+      mtn.position.set(xOff, 5, -58 + Math.random() * 8);
+      mtn.rotation.y = Math.random() * Math.PI;
+      this.mountainSilhouettes.push(mtn);
+      this.group.add(mtn);
+    }
+
+    // 5. Soft Crepuscular God Rays (Extremely subtle, atmospheric ambient haze)
+    const rayGeo = new THREE.ConeGeometry(5.0, 55, 16, 1, true);
+    const rayMat = new THREE.MeshBasicMaterial({
+      color: 0xffe288,
+      transparent: true,
+      opacity: 0.022, // Soft cinematic volumetric haze
+      blending: THREE.AdditiveBlending,
+      side: THREE.DoubleSide,
+      depthWrite: false,
+    });
+    for (let i = 0; i < 5; i++) {
       const ray = new THREE.Mesh(rayGeo, rayMat);
-      ray.position.set((i - 2.5) * 8 + (Math.random() - 0.5) * 4, 16, -10 - Math.random() * 8);
-      ray.rotation.z = -0.25 + (Math.random() - 0.5) * 0.1;
-      ray.rotation.x = 0.2;
+      ray.position.set(-32 + i * 15, 26, -30 - i * 3);
+      ray.rotation.z = -0.3 + i * 0.07;
+      ray.rotation.x = 0.22;
       this.godRays.push(ray);
       this.group.add(ray);
     }
 
-    // --- Floating Sacred Torii Arches & Lantern Ruins ---
-    const woodPbr = this.ctx.assets.pbr('plank', 1, 3);
-    const slatePbr = this.ctx.assets.pbr('slate', 2, 2);
-
+    // 6. Floating Sacred Vermilion Torii Archways & Stone Lanterns
+    const woodPbr = ctx.assets.pbr('plank', 1, 3);
     const toriiMat = new THREE.MeshStandardMaterial({
-      color: 0xc83e20, // Sacred vermilion lacquer
+      color: 0xb82e16, // Sacred vermilion
       map: woodPbr.map,
       normalMap: woodPbr.normalMap,
       roughnessMap: woodPbr.roughnessMap,
       roughness: 0.5,
       metalness: 0.1,
     });
-
-    const lanternMat = new THREE.MeshStandardMaterial({
-      color: 0x44444c,
-      map: slatePbr.map,
-      normalMap: slatePbr.normalMap,
-      roughnessMap: slatePbr.roughnessMap,
-      roughness: 0.7,
-      metalness: 0.2,
+    const blackLacquerMat = new THREE.MeshStandardMaterial({
+      color: 0x121216,
+      roughness: 0.35,
+      metalness: 0.25,
     });
 
-    // Build 2 magnificent floating Torii archways
-    for (const offset of [-16, 16]) {
+    for (const offset of [-20, 19]) {
       const archGroup = new THREE.Group();
-      archGroup.position.set(offset, 4.5, -14);
-      archGroup.rotation.y = (Math.random() - 0.5) * 0.4;
+      archGroup.position.set(offset, 3.8, -12);
+      archGroup.rotation.y = (Math.random() - 0.5) * 0.25;
 
-      // Pillars
-      const pillarGeo = new THREE.CylinderGeometry(0.35, 0.45, 8.5, 12);
-      const p1 = new THREE.Mesh(pillarGeo, toriiMat);
-      p1.position.set(-3.2, 0, 0);
-      const p2 = new THREE.Mesh(pillarGeo, toriiMat);
-      p2.position.set(3.2, 0, 0);
+      const pillarGeo = new THREE.CylinderGeometry(0.32, 0.42, 8.0, 16);
+      const baseGeo = new THREE.CylinderGeometry(0.5, 0.55, 1.4, 16);
 
-      // Top curved lintel (Kasagi)
-      const lintelGeo = new THREE.BoxGeometry(9.0, 0.65, 0.7);
+      for (const side of [-3.2, 3.2]) {
+        const p = new THREE.Mesh(pillarGeo, toriiMat);
+        p.position.set(side, 0, 0);
+        const b = new THREE.Mesh(baseGeo, blackLacquerMat);
+        b.position.set(side, -3.3, 0);
+        archGroup.add(p, b);
+      }
+
+      const lintelGeo = new THREE.BoxGeometry(9.2, 0.65, 0.75);
       const lintel = new THREE.Mesh(lintelGeo, toriiMat);
-      lintel.position.set(0, 4.2, 0);
+      lintel.position.set(0, 4.0, 0);
 
-      // Tie beam (Nuki)
-      const tieGeo = new THREE.BoxGeometry(7.2, 0.4, 0.45);
+      const capGeo = new THREE.BoxGeometry(9.6, 0.15, 0.85);
+      const cap = new THREE.Mesh(capGeo, blackLacquerMat);
+      cap.position.set(0, 4.38, 0);
+
+      const tieGeo = new THREE.BoxGeometry(7.4, 0.42, 0.45);
       const tie = new THREE.Mesh(tieGeo, toriiMat);
-      tie.position.set(0, 2.9, 0);
+      tie.position.set(0, 2.7, 0);
 
-      archGroup.add(p1, p2, lintel, tie);
-      this.floatingPillars.push(p1, p2, lintel, tie);
+      archGroup.add(lintel, cap, tie);
+      this.floatingStructures.push(archGroup);
       this.group.add(archGroup);
     }
 
-    // Floating sacred stone lanterns with warm amber glow
+    // Floating Stone Lanterns
     const lanternGeo = new THREE.BoxGeometry(0.7, 1.2, 0.7);
-    const glowGeo = new THREE.SphereGeometry(0.2, 8, 8);
-    const glowMat = new THREE.MeshBasicMaterial({ color: 0xffaa22 });
+    const fireGeo = new THREE.SphereGeometry(0.22, 12, 12);
+    const fireMat = new THREE.MeshBasicMaterial({ color: 0xffaa22 });
+
     for (let i = 0; i < 4; i++) {
       const lanternGroup = new THREE.Group();
-      lanternGroup.position.set(-20 + i * 13, 2.5 + Math.sin(i) * 1.5, -8 - (i % 2) * 5);
-      const stone = new THREE.Mesh(lanternGeo, lanternMat);
-      const fire = new THREE.Mesh(glowGeo, glowMat);
+      lanternGroup.position.set(-24 + i * 16, 2.2 + (i % 2) * 1.2, -6 - (i % 2) * 4);
+      const stone = new THREE.Mesh(lanternGeo, blackLacquerMat);
+      const fire = new THREE.Mesh(fireGeo, fireMat);
       fire.position.y = 0.1;
       lanternGroup.add(stone, fire);
+      this.floatingStructures.push(lanternGroup);
       this.group.add(lanternGroup);
-      this.floatingPillars.push(stone);
     }
 
-    // --- Golden Stardust / Holy Motes ---
-    const moteCount = 180;
+    // 7. Golden Stardust & Divine Sakura Petal Motes
+    const moteCount = 150;
     this.motePositions = new Float32Array(moteCount * 3);
     for (let i = 0; i < moteCount; i++) {
-      this.motePositions[i * 3] = (Math.random() - 0.5) * 60;
-      this.motePositions[i * 3 + 1] = Math.random() * 15;
-      this.motePositions[i * 3 + 2] = (Math.random() - 0.5) * 16;
+      this.motePositions[i * 3 + 0] = (Math.random() - 0.5) * 55;
+      this.motePositions[i * 3 + 1] = Math.random() * 12;
+      this.motePositions[i * 3 + 2] = (Math.random() - 0.5) * 20;
     }
-    const motesGeo = new THREE.BufferGeometry();
-    motesGeo.setAttribute('position', new THREE.BufferAttribute(this.motePositions, 3));
-    const motesMat = new THREE.PointsMaterial({
-      color: 0xffe577,
+    const moteGeo = new THREE.BufferGeometry();
+    moteGeo.setAttribute('position', new THREE.BufferAttribute(this.motePositions, 3));
+    const moteMat = new THREE.PointsMaterial({
+      color: 0xffe899,
       size: 0.18,
       transparent: true,
       opacity: 0.85,
       blending: THREE.AdditiveBlending,
     });
-    this.motes = new THREE.Points(motesGeo, motesMat);
+    this.motes = new THREE.Points(moteGeo, moteMat);
     this.group.add(this.motes);
   }
 
-  handleEvent(e: GameEvent, game: Game): void {
+  handleEvent(e: GameEvent, _game: Game): void {
     if (e.type === 'celestial_start') {
       this.active = true;
       this.group.visible = true;
-      // Change sky/fog to glorious warm golden twilight
-      this.ctx.scene.background = new THREE.Color(0xd48844);
-      if (this.ctx.scene.fog instanceof THREE.FogExp2) {
-        this.ctx.scene.fog.color.setHex(0xd48844);
-        this.ctx.scene.fog.density = 0.008;
-      }
+      this.time = 0;
+      // Refined golden-twilight atmosphere
+      this.ctx.scene.fog = new THREE.FogExp2(0x84422e, 0.0038);
+      this.ctx.scene.background = new THREE.Color(0x381e30);
     }
   }
 
@@ -203,36 +262,31 @@ export class CelestialScene implements RenderModule {
       this.group.visible = false;
       return;
     }
+
     this.group.visible = true;
     this.time += dt;
 
-    // Undulate cloud billows gently
-    for (let i = 0; i < this.cloudBillows.length; i++) {
-      const b = this.cloudBillows[i];
-      b.position.y += Math.sin(this.time * 1.2 + i) * 0.003;
+    this.cloudMaterial.uniforms.uTime.value = this.time;
+
+    for (let i = 0; i < this.floatingStructures.length; i++) {
+      const s = this.floatingStructures[i];
+      s.position.y += Math.sin(this.time * 1.2 + i * 1.5) * dt * 0.18;
+      s.rotation.z = Math.sin(this.time * 0.8 + i) * 0.02;
     }
 
-    // Bob floating pillars
-    for (let i = 0; i < this.floatingPillars.length; i++) {
-      const p = this.floatingPillars[i];
-      p.position.y += Math.sin(this.time * 0.8 + i * 2) * 0.004;
-      p.rotation.y += dt * 0.04;
-    }
-
-    // Pulse god rays
     for (let i = 0; i < this.godRays.length; i++) {
       const r = this.godRays[i];
-      (r.material as THREE.MeshBasicMaterial).opacity = 0.12 + Math.sin(this.time * 1.5 + i * 1.2) * 0.06;
+      r.rotation.z += Math.sin(this.time * 0.5 + i) * dt * 0.015;
     }
 
-    // Rise stardust motes
-    const pos = this.motePositions;
-    for (let i = 0; i < pos.length / 3; i++) {
-      pos[i * 3 + 1] += dt * (0.6 + (i % 5) * 0.2);
-      if (pos[i * 3 + 1] > 18) pos[i * 3 + 1] = 0;
-      pos[i * 3] += Math.sin(this.time + i) * dt * 0.3;
+    const posAttr = this.motes.geometry.attributes.position as THREE.BufferAttribute;
+    const arr = posAttr.array as Float32Array;
+    for (let i = 0; i < arr.length / 3; i++) {
+      arr[i * 3 + 0] += dt * 0.65;
+      arr[i * 3 + 1] += Math.sin(this.time * 2.0 + i) * dt * 0.35;
+      if (arr[i * 3 + 0] > 28) arr[i * 3 + 0] = -28;
+      if (arr[i * 3 + 1] > 12) arr[i * 3 + 1] = 0;
     }
-    this.motes.geometry.attributes.position.needsUpdate = true;
+    posAttr.needsUpdate = true;
   }
 }
-

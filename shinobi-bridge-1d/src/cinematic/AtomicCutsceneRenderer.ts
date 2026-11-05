@@ -3,13 +3,87 @@ import type { Game, GameEvent } from '../core/Game.ts';
 import type { RenderContext, RenderModule } from '../render/RenderContext.ts';
 import { worldX } from '../render/RenderContext.ts';
 
+import quantumNucleonVert from '../shaders/QuantumNucleon.vert';
+import quantumNucleonFrag from '../shaders/QuantumNucleon.frag';
+import quantumOrbitalVert from '../shaders/QuantumOrbital.vert';
+import quantumOrbitalFrag from '../shaders/QuantumOrbital.frag';
+import incandescentKatanaVert from '../shaders/IncandescentKatana.vert';
+import incandescentKatanaFrag from '../shaders/IncandescentKatana.frag';
+import dropletCausticVert from '../shaders/DropletCaustic.vert';
+import dropletCausticFrag from '../shaders/DropletCaustic.frag';
+
 /**
- * Renders the dramatic "Atomic Cleave" cutscene:
- * 1. Freeze / Focus: Droplet freezes suspended, camera zooms in smoothly.
- * 2. Atom Zoom: Extreme macro dive into droplet interior, revealing pulsing nucleus and spinning electron rings.
- * 3. Slice: Glowing katana blade cuts cleanly through the atomic nucleus in ultra slow motion.
- * 4. Fission: Blinding white-hot flash, chromatic split, fission detonation.
- * 5. Explosion: Massive nuclear shockwave obliteration of the bridge, launching warrior skyward into the heavens.
+ * Builds an authentic Japanese Katana 3D geometry with:
+ * - Blade Spine (Mune)
+ * - Ridge Line (Shinogi)
+ * - Cutting Edge (Ha)
+ * - Chiseled Tip (Kissaki)
+ * - Subtle Curvature (Sori)
+ * - UV coords mapped: u = 0 (spine) to 1 (cutting edge), v = 0 (hilt) to 1 (tip)
+ */
+function buildKatanaBladeGeometry(): THREE.BufferGeometry {
+  const geo = new THREE.BufferGeometry();
+  const verts: number[] = [];
+  const uvs: number[] = [];
+  const indices: number[] = [];
+
+  const segments = 28;
+  const length = 4.2;
+  const bladeWidth = 0.24;
+  const spineThick = 0.022;
+  const ridgeThick = 0.032;
+  const edgeThick = 0.003;
+  const soriMax = 0.09;
+
+  for (let i = 0; i <= segments; i++) {
+    const v = i / segments;
+    const y = (v - 0.5) * length;
+    const curveX = -Math.sin(v * Math.PI * 0.9) * soriMax;
+
+    const taper = v > 0.82 ? 1.0 - (v - 0.82) / 0.18 * 0.72 : 1.0;
+    const w = bladeWidth * taper;
+    const st = spineThick * taper;
+    const rt = ridgeThick * taper;
+
+    const spineX = curveX - w * 0.45;
+    const ridgeX = curveX - w * 0.12;
+    const edgeX = curveX + w * 0.58;
+
+    verts.push(spineX, y, -st * 0.5); uvs.push(0.0, v);
+    verts.push(spineX, y, st * 0.5);  uvs.push(0.0, v);
+    verts.push(ridgeX, y, -rt * 0.5); uvs.push(0.4, v);
+    verts.push(ridgeX, y, rt * 0.5);  uvs.push(0.4, v);
+    verts.push(edgeX, y, 0);          uvs.push(1.0, v);
+
+    if (i < segments) {
+      const b = i * 5;
+      const n = (i + 1) * 5;
+
+      indices.push(b + 0, n + 0, n + 1, b + 0, n + 1, b + 1);
+      indices.push(b + 0, b + 2, n + 2, b + 0, n + 2, n + 0);
+      indices.push(b + 1, n + 3, b + 3, b + 1, n + 1, n + 3);
+      indices.push(b + 2, b + 4, n + 4, b + 2, n + 4, n + 2);
+      indices.push(b + 3, n + 4, b + 4, b + 3, n + 3, n + 4);
+    }
+  }
+
+  geo.setAttribute('position', new THREE.Float32BufferAttribute(verts, 3));
+  geo.setAttribute('uv', new THREE.Float32BufferAttribute(uvs, 2));
+  geo.setIndex(indices);
+  geo.computeVertexNormals();
+  return geo;
+}
+
+/**
+ * Renders the dramatic "Atomic Cleave" cutscene with quantum shaders:
+ * 1. Freeze / Focus: Droplet suspended in extreme macro close-up.
+ * 2. Atom Zoom: Dive inside the water droplet; reveal pulsating quantum nucleon plasma (protons & neutrons),
+ *    snapping gluon flux electric ligatures, and shimmering electron probability density shells.
+ * 3. Slice: High-detail Katana with incandescent 4500K glowing edge, hamon temper line, and habit collar
+ *    cuts cleanly through the nucleus along the cleavage plane.
+ * 4. Fission: Blinding thermonuclear ignition, chromatic diffraction split.
+ * 5. Explosion: Nuclear blast shockwave vaporizing bridge planks into 3D physics debris.
+ * 6. Ascend: Skyward ascension into the heavenly realm.
  */
 export class AtomicCutsceneRenderer implements RenderModule {
   private readonly ctx: RenderContext;
@@ -19,10 +93,31 @@ export class AtomicCutsceneRenderer implements RenderModule {
   private readonly atomGroup = new THREE.Group();
   private readonly nucleusGroup = new THREE.Group();
   private readonly nucleons: THREE.Mesh[] = [];
-  private readonly electronRings: THREE.Line[] = [];
-  private readonly electrons: THREE.Mesh[] = [];
+  private readonly nucleonMaterials: THREE.ShaderMaterial[] = [];
+  private readonly nucleonPositions: THREE.Vector3[] = [];
+  private readonly nucleonBasePositions: THREE.Vector3[] = [];
+
+  // Dynamic Gluon Electric Flux Arcs
+  private readonly fluxLines: THREE.LineSegments;
+  private readonly fluxPositions: Float32Array;
+  private readonly fluxPairIndices: [number, number][] = [];
+
+  // Translucent Electron Wave Probability Clouds
+  private readonly orbitalMeshes: THREE.Mesh[] = [];
+  private readonly orbitalMaterials: THREE.ShaderMaterial[] = [];
+  private readonly electronWavepackets: THREE.Mesh[] = [];
+
+  // Macro Water Droplet Shell
   private readonly dropletMesh: THREE.Mesh;
-  private readonly bladeMesh: THREE.Mesh;
+  private readonly dropletMaterial: THREE.ShaderMaterial;
+
+  // Authentic Incandescent Katana Blade
+  private readonly katanaGroup = new THREE.Group();
+  private readonly bladeMaterial: THREE.ShaderMaterial;
+
+  // Planar Cleavage Energy Blade
+  private readonly cleavagePlane: THREE.Mesh;
+  private readonly cleavageMaterial: THREE.MeshBasicMaterial;
 
   // Nuclear detonation elements
   private readonly explosionGroup = new THREE.Group();
@@ -51,117 +146,206 @@ export class AtomicCutsceneRenderer implements RenderModule {
     ctx.scene.add(this.group);
     this.group.visible = false;
 
-    // --- Build Procedural Atom ---
-    // Droplet outer shell
-    const dropletGeo = new THREE.SphereGeometry(1.6, 32, 32);
-    const dropletMat = new THREE.MeshPhysicalMaterial({
-      color: 0x99ccff,
-      transmission: 0.88,
-      opacity: 1,
+    // --- 1. Macro Water Droplet Boundary ---
+    const dropletGeo = new THREE.SphereGeometry(1.9, 48, 48);
+    this.dropletMaterial = new THREE.ShaderMaterial({
+      vertexShader: dropletCausticVert,
+      fragmentShader: dropletCausticFrag,
+      uniforms: {
+        uTime: { value: 0 },
+        uOpacity: { value: 0.75 },
+      },
       transparent: true,
-      roughness: 0.05,
-      ior: 1.333,
-      metalness: 0.1,
+      side: THREE.FrontSide,
+      depthWrite: false,
     });
-    this.dropletMesh = new THREE.Mesh(dropletGeo, dropletMat);
+    this.dropletMesh = new THREE.Mesh(dropletGeo, this.dropletMaterial);
     this.atomGroup.add(this.dropletMesh);
 
-    // Nucleus: 18 clustered spheres (protons = ruby/gold, neutrons = cyan/blue)
-    const nucleonGeo = new THREE.SphereGeometry(0.24, 16, 16);
-    const protonMat = new THREE.MeshStandardMaterial({
-      color: 0xff3344,
-      emissive: 0xff1122,
-      emissiveIntensity: 1.2,
-      roughness: 0.2,
-    });
-    const neutronMat = new THREE.MeshStandardMaterial({
-      color: 0x3399ff,
-      emissive: 0x1144ff,
-      emissiveIntensity: 1.2,
-      roughness: 0.2,
-    });
+    // --- 2. Quantum Nucleons (Quark-Gluon Plasma) ---
+    // Refined radius: 0.155 (dense, detailed quantum core)
+    const nucleonGeo = new THREE.SphereGeometry(0.155, 24, 24);
 
-    const tetherPoints: number[] = [];
-    const nucleonPositions: THREE.Vector3[] = [];
     for (let i = 0; i < 18; i++) {
       const isProton = i % 2 === 0;
-      const mesh = new THREE.Mesh(nucleonGeo, isProton ? protonMat : neutronMat);
+
+      const mat = new THREE.ShaderMaterial({
+        vertexShader: quantumNucleonVert,
+        fragmentShader: quantumNucleonFrag,
+        uniforms: {
+          uTime: { value: 0 },
+          uDisplacement: { value: 0.025 },
+          uColorBase: {
+            value: isProton
+              ? new THREE.Color(0xdc143c) // Crimson Proton
+              : new THREE.Color(0x0c4bb8), // Cosmic Sapphire Neutron
+          },
+          uColorCore: {
+            value: isProton
+              ? new THREE.Color(0xfff099) // Solar incandescent core
+              : new THREE.Color(0x66ffff), // Electric cyan core
+          },
+          uColorRim: {
+            value: isProton
+              ? new THREE.Color(0xff44aa) // Magenta/violet quantum halo
+              : new THREE.Color(0x3388ff), // Azure quantum halo
+          },
+          uCleaveHeat: { value: 0 },
+        },
+      });
+
+      const mesh = new THREE.Mesh(nucleonGeo, mat);
       const phi = Math.acos(-1 + (2 * i) / 18);
       const theta = Math.sqrt(18 * Math.PI) * phi;
-      const r = 0.44 + (Math.random() - 0.5) * 0.12;
-      const pos = new THREE.Vector3(r * Math.cos(theta) * Math.sin(phi), r * Math.sin(theta) * Math.sin(phi), r * Math.cos(phi));
+      const r = 0.32 + ((i * 37) % 7) * 0.012;
+      const pos = new THREE.Vector3(
+        r * Math.cos(theta) * Math.sin(phi),
+        r * Math.sin(theta) * Math.sin(phi),
+        r * Math.cos(phi)
+      );
+
       mesh.position.copy(pos);
-      nucleonPositions.push(pos);
       this.nucleons.push(mesh);
+      this.nucleonMaterials.push(mat);
+      this.nucleonPositions.push(pos.clone());
+      this.nucleonBasePositions.push(pos.clone());
       this.nucleusGroup.add(mesh);
     }
 
-    // Connect close nucleons with glowing subatomic energy tether lines
-    for (let i = 0; i < nucleonPositions.length; i++) {
-      for (let j = i + 1; j < nucleonPositions.length; j++) {
-        if (nucleonPositions[i].distanceTo(nucleonPositions[j]) < 0.62) {
-          tetherPoints.push(
-            nucleonPositions[i].x, nucleonPositions[i].y, nucleonPositions[i].z,
-            nucleonPositions[j].x, nucleonPositions[j].y, nucleonPositions[j].z
-          );
+    // Find nucleon pairs for Gluon Electric Flux Arcs
+    for (let i = 0; i < this.nucleonPositions.length; i++) {
+      for (let j = i + 1; j < this.nucleonPositions.length; j++) {
+        if (this.nucleonPositions[i].distanceTo(this.nucleonPositions[j]) < 0.48) {
+          this.fluxPairIndices.push([i, j]);
         }
       }
     }
-    const tetherGeo = new THREE.BufferGeometry();
-    tetherGeo.setAttribute('position', new THREE.Float32BufferAttribute(tetherPoints, 3));
-    const tetherMat = new THREE.LineBasicMaterial({
-      color: 0xffeebb,
+
+    // Each pair gets 4 segments (8 vertices) for zigzag lightning arcs
+    const totalFluxVerts = this.fluxPairIndices.length * 8;
+    this.fluxPositions = new Float32Array(totalFluxVerts * 3);
+    const fluxGeo = new THREE.BufferGeometry();
+    fluxGeo.setAttribute('position', new THREE.BufferAttribute(this.fluxPositions, 3));
+    const fluxMat = new THREE.LineBasicMaterial({
+      color: 0xfffaea,
       transparent: true,
-      opacity: 0.8,
+      opacity: 0.9,
       blending: THREE.AdditiveBlending,
     });
-    const tethers = new THREE.LineSegments(tetherGeo, tetherMat);
-    this.nucleusGroup.add(tethers);
+    this.fluxLines = new THREE.LineSegments(fluxGeo, fluxMat);
+    this.nucleusGroup.add(this.fluxLines);
     this.atomGroup.add(this.nucleusGroup);
 
-    // 4 Tilted Electron Orbital Rings with orbiting electron beads
-    const electronGeo = new THREE.SphereGeometry(0.09, 12, 12);
-    const electronMat = new THREE.MeshBasicMaterial({ color: 0xffffbb });
-    const angles = [0, Math.PI * 0.5, Math.PI * 0.25, Math.PI * 0.75];
+    // --- 3. Electron Probability Wave Clouds & Wavepackets ---
+    const orbitalGeo = new THREE.TorusGeometry(1.25, 0.038, 16, 64);
+    const eAngles = [
+      new THREE.Euler(Math.PI * 0.35, 0, 0),
+      new THREE.Euler(Math.PI * 0.35, Math.PI * 0.35, 0),
+      new THREE.Euler(-Math.PI * 0.25, Math.PI * 0.65, 0),
+    ];
 
-    for (let i = 0; i < 4; i++) {
-      const curve = new THREE.EllipseCurve(0, 0, 1.35, 1.35, 0, 2 * Math.PI, false, 0);
-      const points = curve.getPoints(64);
-      const ringGeo = new THREE.BufferGeometry().setFromPoints(points);
-      const ringMat = new THREE.LineBasicMaterial({
-        color: i % 2 === 0 ? 0x77eeff : 0xffaa55,
+    for (let i = 0; i < 3; i++) {
+      const oMat = new THREE.ShaderMaterial({
+        vertexShader: quantumOrbitalVert,
+        fragmentShader: quantumOrbitalFrag,
+        uniforms: {
+          uTime: { value: 0 },
+          uColorA: { value: new THREE.Color(i === 0 ? 0x00f0ff : i === 1 ? 0xffaa33 : 0xcc66ff) },
+          uColorB: { value: new THREE.Color(0xffffff) },
+          uOpacity: { value: 0.75 },
+        },
         transparent: true,
-        opacity: 0.75,
+        blending: THREE.AdditiveBlending,
+        side: THREE.DoubleSide,
+        depthWrite: false,
+      });
+
+      const oMesh = new THREE.Mesh(orbitalGeo, oMat);
+      oMesh.rotation.copy(eAngles[i]);
+      this.orbitalMeshes.push(oMesh);
+      this.orbitalMaterials.push(oMat);
+      this.atomGroup.add(oMesh);
+
+      // Fast-moving electron probability wavepacket spark
+      const packetGeo = new THREE.SphereGeometry(0.055, 12, 12);
+      const packetMat = new THREE.MeshBasicMaterial({
+        color: 0xffffff,
         blending: THREE.AdditiveBlending,
       });
-      const ring = new THREE.Line(ringGeo, ringMat);
-      ring.rotation.x = Math.PI * 0.35 + i * 0.28;
-      ring.rotation.y = angles[i];
-      this.electronRings.push(ring);
-      this.atomGroup.add(ring);
-
-      const eMesh = new THREE.Mesh(electronGeo, electronMat);
-      this.electrons.push(eMesh);
-      this.atomGroup.add(eMesh);
+      const packetMesh = new THREE.Mesh(packetGeo, packetMat);
+      this.electronWavepackets.push(packetMesh);
+      this.atomGroup.add(packetMesh);
     }
 
-    // Incandescent Katana Blade with Etched Glowing Edge
-    const bladeGeo = new THREE.BoxGeometry(0.045, 3.5, 0.45);
-    const bladeMat = new THREE.MeshStandardMaterial({
-      color: 0xffffff,
-      emissive: 0xffeebb,
-      emissiveIntensity: 3.0,
-      roughness: 0.08,
-      metalness: 0.9,
+    // --- 4. Authentic Incandescent Katana Blade ---
+    const bladeGeo = buildKatanaBladeGeometry();
+    this.bladeMaterial = new THREE.ShaderMaterial({
+      vertexShader: incandescentKatanaVert,
+      fragmentShader: incandescentKatanaFrag,
+      uniforms: {
+        uTime: { value: 0 },
+        uHeatIntensity: { value: 0.5 },
+      },
+      side: THREE.DoubleSide,
     });
-    this.bladeMesh = new THREE.Mesh(bladeGeo, bladeMat);
-    this.bladeMesh.rotation.z = Math.PI * 0.3;
-    this.atomGroup.add(this.bladeMesh);
+    const bladeMesh = new THREE.Mesh(bladeGeo, this.bladeMaterial);
+    this.katanaGroup.add(bladeMesh);
+
+    // Habaki (antique brass collar)
+    const habakiGeo = new THREE.BoxGeometry(0.28, 0.22, 0.05);
+    const habakiMat = new THREE.MeshStandardMaterial({
+      color: 0xd4af37,
+      metalness: 0.9,
+      roughness: 0.25,
+    });
+    const habaki = new THREE.Mesh(habakiGeo, habakiMat);
+    habaki.position.set(0, -2.0, 0);
+    this.katanaGroup.add(habaki);
+
+    // Tsuba (iron sword guard)
+    const tsubaGeo = new THREE.CylinderGeometry(0.32, 0.32, 0.03, 16);
+    const tsubaMat = new THREE.MeshStandardMaterial({
+      color: 0x1a1a1a,
+      metalness: 0.8,
+      roughness: 0.6,
+    });
+    const tsuba = new THREE.Mesh(tsubaGeo, tsubaMat);
+    tsuba.position.set(0, -2.12, 0);
+    this.katanaGroup.add(tsuba);
+
+    // Tsuka (hilt with wrapped grip)
+    const tsukaGeo = new THREE.CylinderGeometry(0.07, 0.08, 1.2, 8);
+    const tsukaMat = new THREE.MeshStandardMaterial({
+      color: 0x0f1118,
+      roughness: 0.8,
+    });
+    const tsuka = new THREE.Mesh(tsukaGeo, tsukaMat);
+    tsuka.position.set(0, -2.75, 0);
+    this.katanaGroup.add(tsuka);
+
+    // Orientation: 45 degree angle for dynamic diagonal slice
+    this.katanaGroup.rotation.z = Math.PI * 0.28;
+    this.katanaGroup.rotation.y = -0.15;
+    this.atomGroup.add(this.katanaGroup);
+
+    // --- 5. Planar Cleavage Energy Blade (Fission Fissure) ---
+    const cleaveGeo = new THREE.PlaneGeometry(0.12, 5.5);
+    this.cleavageMaterial = new THREE.MeshBasicMaterial({
+      color: 0xffffff,
+      transparent: true,
+      opacity: 0,
+      blending: THREE.AdditiveBlending,
+      side: THREE.DoubleSide,
+      depthWrite: false,
+    });
+    this.cleavagePlane = new THREE.Mesh(cleaveGeo, this.cleavageMaterial);
+    this.cleavagePlane.rotation.z = Math.PI * 0.28;
+    this.atomGroup.add(this.cleavagePlane);
+
     this.group.add(this.atomGroup);
 
-    // --- Nuclear Detonation FX ---
-    // Shockwave Ring
-    const shockGeo = new THREE.TorusGeometry(1, 0.24, 16, 64);
+    // --- 6. Nuclear Detonation Elements ---
+    const shockGeo = new THREE.TorusGeometry(1, 0.3, 20, 64);
     const shockMat = new THREE.MeshBasicMaterial({
       color: 0xffeedd,
       transparent: true,
@@ -240,7 +424,7 @@ export class AtomicCutsceneRenderer implements RenderModule {
     this.speedlines.visible = false;
   }
 
-  handleEvent(e: GameEvent, game: Game): void {
+  handleEvent(e: GameEvent, _game: Game): void {
     if (e.type === 'atomic_trigger') {
       this.active = true;
       this.group.visible = true;
@@ -254,8 +438,13 @@ export class AtomicCutsceneRenderer implements RenderModule {
       this.speedlines.visible = false;
       this.flashIntensity = 0;
       this.flashMaterial.opacity = 0;
+      this.cleavageMaterial.opacity = 0;
 
-      // Position debris around bridge
+      for (let i = 0; i < this.nucleons.length; i++) {
+        this.nucleons[i].position.copy(this.nucleonBasePositions[i]);
+        this.nucleonMaterials[i].uniforms.uCleaveHeat.value = 0;
+      }
+
       for (let i = 0; i < this.debrisMeshes.length; i++) {
         const m = this.debrisMeshes[i];
         m.visible = false;
@@ -292,75 +481,140 @@ export class AtomicCutsceneRenderer implements RenderModule {
     const phase = sim.phase;
     const p = sim.progress;
 
-    // Fade flash
     if (this.flashIntensity > 0) {
       this.flashIntensity = Math.max(0, this.flashIntensity - dt * 1.5);
       this.flashMaterial.opacity = this.flashIntensity;
     }
 
-    // Phase 1: Freeze (0 - 1.2s)
+    this.dropletMaterial.uniforms.uTime.value = this.time;
+    this.bladeMaterial.uniforms.uTime.value = this.time;
+    for (const mat of this.nucleonMaterials) mat.uniforms.uTime.value = this.time;
+    for (const mat of this.orbitalMaterials) mat.uniforms.uTime.value = this.time;
+
+    // Dynamic Gluon Electric Flux Arcs: jitter zigzag paths
+    let fluxIdx = 0;
+    const posAttr = this.fluxLines.geometry.attributes.position as THREE.BufferAttribute;
+    const arr = posAttr.array as Float32Array;
+
+    for (const [i, j] of this.fluxPairIndices) {
+      const p1 = this.nucleons[i].position;
+      const p2 = this.nucleons[j].position;
+
+      const jitter1 = new THREE.Vector3(
+        (Math.random() - 0.5) * 0.035,
+        (Math.random() - 0.5) * 0.035,
+        (Math.random() - 0.5) * 0.035
+      );
+      const jitter2 = new THREE.Vector3(
+        (Math.random() - 0.5) * 0.035,
+        (Math.random() - 0.5) * 0.035,
+        (Math.random() - 0.5) * 0.035
+      );
+
+      const m1 = p1.clone().lerp(p2, 0.33).add(jitter1);
+      const m2 = p1.clone().lerp(p2, 0.66).add(jitter2);
+
+      arr[fluxIdx++] = p1.x; arr[fluxIdx++] = p1.y; arr[fluxIdx++] = p1.z;
+      arr[fluxIdx++] = m1.x; arr[fluxIdx++] = m1.y; arr[fluxIdx++] = m1.z;
+
+      arr[fluxIdx++] = m1.x; arr[fluxIdx++] = m1.y; arr[fluxIdx++] = m1.z;
+      arr[fluxIdx++] = m2.x; arr[fluxIdx++] = m2.y; arr[fluxIdx++] = m2.z;
+
+      arr[fluxIdx++] = m2.x; arr[fluxIdx++] = m2.y; arr[fluxIdx++] = m2.z;
+      arr[fluxIdx++] = p2.x; arr[fluxIdx++] = p2.y; arr[fluxIdx++] = p2.z;
+
+      arr[fluxIdx++] = m1.x; arr[fluxIdx++] = m1.y; arr[fluxIdx++] = m1.z;
+      arr[fluxIdx++] = m2.x + jitter1.x; arr[fluxIdx++] = m2.y + jitter1.y; arr[fluxIdx++] = m2.z + jitter1.z;
+    }
+    posAttr.needsUpdate = true;
+
+    // Phase 1: Freeze / Focus (0 - 1.2s)
     if (phase === 'freeze') {
       this.atomGroup.visible = true;
-      const scale = THREE.MathUtils.lerp(0.01, 0.4, p);
+      const scale = THREE.MathUtils.lerp(0.01, 0.45, p);
       this.atomGroup.scale.setScalar(scale);
-      this.bladeMesh.position.set(-2.5, 2.5, 0);
+      this.katanaGroup.position.set(-2.8, 2.8, 0);
       this.nucleusGroup.position.set(0, 0, 0);
+      this.bladeMaterial.uniforms.uHeatIntensity.value = 0.2;
+      this.cleavageMaterial.opacity = 0;
     }
     // Phase 2: Macro Atom Zoom (1.2 - 2.8s)
     else if (phase === 'atom_zoom') {
       this.atomGroup.visible = true;
-      const scale = THREE.MathUtils.lerp(0.4, 2.2, p);
+      const scale = THREE.MathUtils.lerp(0.45, 1.85, p);
       this.atomGroup.scale.setScalar(scale);
-      // Spin electrons fast
+
       for (let i = 0; i < 3; i++) {
-        const ring = this.electronRings[i];
-        ring.rotation.z += dt * (12 + i * 4);
-        const theta = this.time * (18 + i * 5);
-        this.electrons[i].position.set(
-          Math.cos(theta) * 1.25 * Math.cos(ring.rotation.y),
-          Math.sin(theta) * 1.25,
-          Math.cos(theta) * 1.25 * Math.sin(ring.rotation.y)
-        );
+        const ring = this.orbitalMeshes[i];
+        ring.rotation.z += dt * (8 + i * 3);
+        const theta = this.time * (16 + i * 6);
+        const rad = 1.25;
+        const localPos = new THREE.Vector3(Math.cos(theta) * rad, Math.sin(theta) * rad, 0);
+        localPos.applyEuler(ring.rotation);
+        this.electronWavepackets[i].position.copy(localPos);
       }
-      // Nucleus vibrations
+
       for (let i = 0; i < this.nucleons.length; i++) {
-        const n = this.nucleons[i];
-        n.position.x += (Math.random() - 0.5) * 0.02;
-        n.position.y += (Math.random() - 0.5) * 0.02;
+        const base = this.nucleonBasePositions[i];
+        const jx = Math.sin(this.time * 20 + i * 3) * 0.012;
+        const jy = Math.cos(this.time * 22 + i * 5) * 0.012;
+        const jz = Math.sin(this.time * 25 + i * 7) * 0.012;
+        this.nucleons[i].position.set(base.x + jx, base.y + jy, base.z + jz);
       }
+
       // Blade approaches
-      const bladeX = THREE.MathUtils.lerp(-3.0, -0.6, p);
-      const bladeY = THREE.MathUtils.lerp(3.0, 0.6, p);
-      this.bladeMesh.position.set(bladeX, bladeY, 0);
+      const bladeX = THREE.MathUtils.lerp(-3.2, -0.65, p);
+      const bladeY = THREE.MathUtils.lerp(3.2, 0.65, p);
+      this.katanaGroup.position.set(bladeX, bladeY, 0);
+      this.bladeMaterial.uniforms.uHeatIntensity.value = THREE.MathUtils.lerp(0.3, 0.9, p);
+      this.cleavageMaterial.opacity = 0;
     }
     // Phase 3: Slice (2.8 - 3.8s)
     else if (phase === 'slice') {
-      // Blade sweeps cleanly across the nucleus center!
-      const bladeX = THREE.MathUtils.lerp(-0.6, 2.5, p);
-      const bladeY = THREE.MathUtils.lerp(0.6, -2.5, p);
-      this.bladeMesh.position.set(bladeX, bladeY, 0);
+      this.atomGroup.visible = true;
+      this.atomGroup.scale.setScalar(1.85); // Maintain full macro scale!
 
-      // Slicing fissure: nucleons start to shear apart along slice plane
+      // Blade sweeps cleanly across the nucleus center!
+      const bladeX = THREE.MathUtils.lerp(-0.65, 2.2, p);
+      const bladeY = THREE.MathUtils.lerp(0.65, -2.2, p);
+      this.katanaGroup.position.set(bladeX, bladeY, 0);
+
+      this.bladeMaterial.uniforms.uHeatIntensity.value = 1.0;
+
+      // Planar Cleavage Energy Blade
+      this.cleavageMaterial.opacity = Math.sin(p * Math.PI) * 0.95;
+      this.cleavagePlane.scale.set(1 + p * 2.2, 1, 1);
+
+      // Nucleons shear apart along cleavage axis and heat up to blinding incandescence!
       for (let i = 0; i < this.nucleons.length; i++) {
-        const n = this.nucleons[i];
-        const dir = i % 2 === 0 ? 1 : -1;
-        n.position.x += dir * p * 0.04;
-        n.position.y += dir * p * 0.04;
+        const base = this.nucleonBasePositions[i];
+        const side = i % 2 === 0 ? 1 : -1;
+        const shearDist = Math.pow(p, 1.8) * 0.48;
+        this.nucleons[i].position.set(
+          base.x + side * shearDist * 0.7,
+          base.y + side * shearDist * 0.7,
+          base.z + (Math.random() - 0.5) * 0.02
+        );
+        this.nucleonMaterials[i].uniforms.uCleaveHeat.value = Math.min(1.0, p * 1.6);
       }
+
       if (p > 0.8) {
         this.flashIntensity = Math.min(1.0, (p - 0.8) * 5.0);
       }
     }
     // Phase 4: Fission (3.8 - 4.6s)
     else if (phase === 'fission') {
+      this.atomGroup.visible = true;
+      this.atomGroup.scale.setScalar(1.85);
       this.flashIntensity = 1.0;
       this.flashMaterial.opacity = 1.0;
-      // Nucleus halves violently repel
+      this.cleavageMaterial.opacity = 1.0;
+
       for (let i = 0; i < this.nucleons.length; i++) {
-        const n = this.nucleons[i];
-        const dir = i % 2 === 0 ? 1 : -1;
-        n.position.x += dir * dt * 8.0;
-        n.position.y += dir * dt * 8.0;
+        const side = i % 2 === 0 ? 1 : -1;
+        this.nucleons[i].position.x += side * dt * 9.0;
+        this.nucleons[i].position.y += side * dt * 9.0;
+        this.nucleonMaterials[i].uniforms.uCleaveHeat.value = 1.0;
       }
     }
     // Phase 5: Explosion & Bridge Collapse (4.6 - 6.2s)
@@ -368,17 +622,14 @@ export class AtomicCutsceneRenderer implements RenderModule {
       this.atomGroup.visible = false;
       this.explosionGroup.visible = true;
 
-      // Expand shockwave torus
       const shockScale = THREE.MathUtils.lerp(1, 45, p);
       this.shockwaveMesh.scale.set(shockScale, shockScale, shockScale);
       (this.shockwaveMesh.material as THREE.MeshBasicMaterial).opacity = Math.max(0, 1 - p);
 
-      // Expand fiery blast sphere
       const fireScale = THREE.MathUtils.lerp(1, 28, Math.pow(p, 0.6));
       this.fireballMesh.scale.set(fireScale, fireScale * 1.5, fireScale);
       (this.fireballMesh.material as THREE.MeshBasicMaterial).opacity = Math.max(0, 0.9 - p * 0.9);
 
-      // Debris physics simulation
       for (let i = 0; i < this.debrisMeshes.length; i++) {
         const m = this.debrisMeshes[i];
         const v = this.debrisVelocities[i];
@@ -386,7 +637,7 @@ export class AtomicCutsceneRenderer implements RenderModule {
         m.position.x += v.x * dt;
         m.position.y += v.y * dt;
         m.position.z += v.z * dt;
-        v.y -= 22 * dt; // Gravity
+        v.y -= 22 * dt;
         m.rotation.x += r.x * dt;
         m.rotation.y += r.y * dt;
         m.rotation.z += r.z * dt;
@@ -404,11 +655,9 @@ export class AtomicCutsceneRenderer implements RenderModule {
       this.speedlines.visible = true;
       this.speedlines.position.y -= dt * 90;
       if (this.speedlines.position.y < -30) this.speedlines.position.y = 20;
-      // Gentle golden glow
       this.flashMaterial.color.setHex(0xffeebb);
       this.flashIntensity = THREE.MathUtils.lerp(0.8, 0, p);
       this.flashMaterial.opacity = this.flashIntensity;
     }
   }
 }
-
