@@ -112,6 +112,18 @@ export class HUD {
       case 'levelup':
         this.say(`Level ${e.level}`, e.perk ?? titleFor(e.level), e.perk ? 'perk' : '', 3000);
         break;
+      case 'atomic_trigger':
+        this.say('ATOMIC CLEAVE', 'The blade strikes the droplet at sub-atomic realm...', 'perk', 4000);
+        break;
+      case 'celestial_start':
+        this.say('CELESTIAL CLASH', 'High above the storm: Slay demons, embrace angels!', '', 4500);
+        break;
+      case 'angel_bless':
+        this.say('ANGELIC BLESSING', 'Light Blade activated! Robes dried to full!', 'perk', 2500);
+        break;
+      case 'angel_struck':
+        this.say('SACRILEGE!', 'You struck an angel! Blessing shattered!', '', 2500);
+        break;
       default:
         break;
     }
@@ -124,7 +136,16 @@ export class HUD {
     this.fill('exp', lv.progress);
 
     const w = game.waves;
-    if (w.t < 0) {
+    if (game.phase === 'celestial') {
+      const cb = game.celestial;
+      this.text('front', cb.lightBladeActive ? `Light Blade (${Math.ceil(cb.lightBladeTimer)}s)` : 'Celestial Clash');
+      this.text('wave', `Heaven Wave ${cb.wave} · ${cb.stats.demonsSlain} Slain`);
+      this.fill('waveFill', cb.lightBladeActive ? cb.lightBladeTimer / 12 : 1);
+    } else if (game.phase === 'cutscene') {
+      this.text('front', 'ATOMIC CLEAVE');
+      this.text('wave', game.cutscene.phase.toUpperCase());
+      this.fill('waveFill', game.cutscene.progress);
+    } else if (w.t < 0) {
       this.text('front', 'The storm draws breath');
       this.text('wave', `Wave ${w.wave} in ${Math.ceil(-w.t)}`);
       this.fill('waveFill', 0);

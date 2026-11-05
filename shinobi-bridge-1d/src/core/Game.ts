@@ -16,13 +16,16 @@ import { PROFILES, clumpSnow, damageOf, expOf, extents, makeDrop, moveDrops, swe
 import type { Drop, DropKind } from '../weather/PrecipitationDroplet.ts';
 import { KatanaSlash, SWEET_HALF_WIDTH, SWEET_HIGH, SWEET_LOW, WAKE_MAX_R } from '../warrior/KatanaSlash.ts';
 import { HALF_WIDTH, KICK_DEPTH, WarriorController } from '../warrior/WarriorController.ts';
+import { AtomicCutsceneSim } from '../cinematic/AtomicCutsceneSim.ts';
+import { CelestialBattle } from '../celestial/CelestialBattle.ts';
+import type { DemonKind } from '../celestial/CelestialBattle.ts';
 
 export const STEAM_RADIUS = 1.8;
 export const HITSTOP = 0.06;
 /** Snow a rain drop melts where it lands (m of depth). */
 const RAIN_MELT = 0.006;
 
-export type Phase = 'menu' | 'playing' | 'paused' | 'over';
+export type Phase = 'menu' | 'playing' | 'paused' | 'cutscene' | 'celestial' | 'over';
 
 export interface FrameInput {
   moveX: number;
@@ -58,6 +61,18 @@ export type GameEvent =
   | { type: 'clear'; wave: number; exp: number; repaired: number }
   | { type: 'levelup'; level: number; perk: string | null }
   | { type: 'focus'; x: number; count: number }
+  | { type: 'atomic_trigger'; x: number; y: number }
+  | { type: 'atomic_fission'; x: number; y: number }
+  | { type: 'atomic_explosion'; x: number; y: number }
+  | { type: 'bridge_collapse' }
+  | { type: 'celestial_start' }
+  | { type: 'demon_spawn'; id: number; x: number; y: number; kind: DemonKind }
+  | { type: 'demon_slain'; id: number; x: number; y: number; points: number; kind?: DemonKind }
+  | { type: 'angel_spawn'; id: number; x: number; y: number }
+  | { type: 'angel_bless'; id?: number; x: number; y: number }
+  | { type: 'angel_struck'; id?: number; x: number; y: number }
+  | { type: 'light_blade_start' }
+  | { type: 'light_blade_end' }
   | { type: 'over' };
 
 export interface RunStats {
@@ -84,6 +99,8 @@ export class Game {
   waves = new WaveDirector(1);
   warrior = new WarriorController();
   katana = new KatanaSlash();
+  readonly cutscene = new AtomicCutsceneSim();
+  readonly celestial = new CelestialBattle();
   levels: LevelManager;
   disabled: Set<Perk>;
   stance: Stance;
@@ -118,7 +135,7 @@ export class Game {
 
   /** Where the warrior's feet are. */
   get feetY(): number {
-    return this.bridge.deckY(this.warrior.x);
+    return this.phase === 'celestial' ? 0 : this.bridge.deckY(this.warrior.x);
   }
 
   get exposed(): boolean {
@@ -127,6 +144,12 @@ export class Game {
 
   get focusReady(): boolean {
     return this.stance.focus && this.focusCooldown === 0;
+  }
+
+  triggerAtomicCleave(): void {
+    this.phase = 'cutscene';
+    this.cutscene.start(this.warrior.x, this.feetY);
+    this.events.push({ type: 'atomic_trigger', x: this.warrior.x, y: this.feetY });
   }
 
   start(seed = (Math.random() * 2 ** 31) | 0): void {
@@ -139,6 +162,8 @@ export class Game {
     this.waves = new WaveDirector(seed);
     this.warrior = new WarriorController();
     this.katana = new KatanaSlash();
+    this.cutscene.active = false;
+    this.celestial.active = false;
     this.dryness = 100;
     this.shieldUp = true;
     this.shieldReform = 0;
@@ -163,6 +188,14 @@ export class Game {
   }
 
   step(dt: number, input: FrameInput): void {
+    if (this.phase === 'cutscene') {
+      this.stepCutscene(dt);
+      return;
+    }
+    if (this.phase === 'celestial') {
+      this.stepCelestial(dt, input);
+      return;
+    }
     if (this.phase !== 'playing') return;
     if (input.slashPressed) this.katana.press();
     if (this.hitstop > 0) {
@@ -237,6 +270,91 @@ export class Game {
     }
   }
 
+  private stepCutscene(dt: number): void {
+    const done = this.cutscene.update(dt);
+    for (const e of this.cutscene.events) {
+      if (e.type === 'atomic_freeze') this.events.push({ type: 'atomic_trigger', x: e.x, y: e.y });
+      else if (e.type === 'atomic_fission') this.events.push({ type: 'atomic_fission', x: e.x, y: e.y });
+      else if (e.type === 'atomic_explosion') this.events.push({ type: 'atomic_explosion', x: e.x, y: e.y });
+      else if (e.type === 'bridge_shatter') this.events.push({ type: 'bridge_collapse' });
+    }
+    this.cutscene.events.length = 0;
+
+    if (done) {
+      this.phase = 'celestial';
+      this.celestial.start(this.warrior.x);
+      this.events.push({ type: 'celestial_start' });
+    }
+  }
+
+  private stepCelestial(dt: number, input: FrameInput): void {
+    if (input.slashPressed) this.katana.press();
+    if (this.hitstop > 0) {
+      this.hitstop = Math.max(0, this.hitstop - dt);
+      return;
+    }
+    this.time += dt;
+    this.stats.time += dt;
+    const w = this.warrior;
+    const s = this.stance;
+
+    const moved = w.update(dt, { moveX: input.moveX, dash: input.dashPressed, kick: input.kickPressed }, { stance: s, bridge: this.bridge, snow: this.snow, exposed: this.exposed });
+    if (moved.dashed) {
+      this.events.push({ type: 'dash', x: w.x, dir: w.dashDir });
+    }
+    if (moved.kicked) {
+      this.events.push({ type: 'kick', x: w.x, dir: w.facing, area: 0 });
+    }
+    if (moved.stumbled) this.events.push({ type: 'stumble', x: w.x });
+
+    const slash = this.katana.update(dt, s, w.facing, w.stun <= 0 && !w.kicking && !w.rolling);
+    if (slash === 'start') {
+      for (const arc of this.katana.arcs(w.x, 0, s)) {
+        this.events.push({ type: 'slash', x: w.x, y: 0, side: arc.side });
+      }
+    } else if (slash === 'whiff') {
+      this.events.push({ type: 'whiff', x: w.x });
+    }
+
+    this.celestial.update(dt, w, this.katana, s, (delta) => {
+      this.dryness = Math.max(0, Math.min(100, this.dryness + delta));
+      if (delta < 0) {
+        this.combo = 0;
+        this.stats.hits++;
+        w.stun = 0.15;
+      }
+    });
+
+    for (const e of this.celestial.events) {
+      if (e.type === 'demon_spawn') this.events.push({ type: 'demon_spawn', id: e.id!, x: e.x!, y: e.y!, kind: e.kind! });
+      else if (e.type === 'demon_slain') {
+        this.combo++;
+        this.stats.bestCombo = Math.max(this.stats.bestCombo, this.combo);
+        this.stats.cut++;
+        this.gain(e.points! / 2);
+        this.events.push({ type: 'demon_slain', id: e.id!, x: e.x!, y: e.y!, points: e.points!, kind: e.kind });
+      } else if (e.type === 'angel_spawn') {
+        this.events.push({ type: 'angel_spawn', id: e.id!, x: e.x!, y: e.y! });
+      } else if (e.type === 'angel_bless') {
+        this.events.push({ type: 'angel_bless', id: e.id, x: e.x!, y: e.y! });
+      } else if (e.type === 'angel_struck') {
+        this.combo = 0;
+        this.events.push({ type: 'angel_struck', id: e.id, x: e.x!, y: e.y! });
+      } else if (e.type === 'light_blade_start') {
+        this.events.push({ type: 'light_blade_start' });
+      } else if (e.type === 'light_blade_end') {
+        this.events.push({ type: 'light_blade_end' });
+      }
+    }
+    this.celestial.events.length = 0;
+
+    if (this.dryness <= 0) {
+      this.dryness = 0;
+      this.phase = 'over';
+      this.events.push({ type: 'over' });
+    }
+  }
+
   private stepWaves(dt: number): void {
     this.waves.update(dt);
     for (const e of this.waves.events) {
@@ -250,6 +368,9 @@ export class Game {
         this.snow.setOpen(0, BRIDGE_LENGTH, false);
         this.gain(exp);
         this.events.push({ type: 'clear', wave: e.wave, exp, repaired });
+        if (e.wave === 50) {
+          this.triggerAtomicCleave();
+        }
       }
     }
     this.waves.events.length = 0;

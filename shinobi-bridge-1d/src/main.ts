@@ -56,7 +56,7 @@ function toggleMute(): void {
 
 input.onMute = toggleMute;
 input.onPause = () => {
-  if (game.phase === 'playing') pause();
+  if (game.phase === 'playing' || game.phase === 'celestial') pause();
   else if (game.phase === 'paused') resume();
 };
 const touch = document.getElementById('touch');
@@ -75,7 +75,7 @@ function begin(seed?: number): void {
 }
 
 function pause(): void {
-  if (game.phase !== 'playing') return;
+  if (game.phase !== 'playing' && game.phase !== 'celestial') return;
   game.phase = 'paused';
   input.enabled = false;
   audio.suspend(true);
@@ -85,7 +85,7 @@ function pause(): void {
 
 function resume(): void {
   if (game.phase !== 'paused') return;
-  game.phase = 'playing';
+  game.phase = game.celestial.active ? 'celestial' : 'playing';
   input.clear();
   input.enabled = true;
   audio.suspend(false);
@@ -141,10 +141,11 @@ function frame(now: number): void {
   requestAnimationFrame(frame);
   const dt = Math.min(MAX_FRAME, (now - last) / 1000);
   last = now;
-  if (game.phase === 'playing' && !debug.frozen) {
+  const activePlay = game.phase === 'playing' || game.phase === 'cutscene' || game.phase === 'celestial';
+  if (activePlay && !debug.frozen) {
     acc += dt;
     let f = input.sample();
-    while (acc >= STEP && game.phase === 'playing') {
+    while (acc >= STEP && (game.phase === 'playing' || game.phase === 'cutscene' || game.phase === 'celestial')) {
       game.step(STEP, f);
       // A press reaches only the first step of the frame.
       f = { ...NO_INPUT, moveX: f.moveX };
@@ -153,7 +154,7 @@ function frame(now: number): void {
   }
   for (let i = 0; i < game.events.length; i++) handle(game.events[i]);
   game.events.length = 0;
-  if (game.phase === 'playing') {
+  if (activePlay) {
     hud.update(game);
     audio.update(dt, game);
   }
@@ -213,8 +214,18 @@ async function boot(): Promise<void> {
       spawn(kind: DropKind, x: number, y: number, r?: number) {
         return game.spawn(kind, x, y, r);
       },
+      triggerAtomicCleave() {
+        if (game.phase === 'menu') begin();
+        game.triggerAtomicCleave();
+      },
     });
     w.bridgeDebug = debug;
+    window.addEventListener('keydown', (e) => {
+      if (e.code === 'KeyC' && !e.repeat) {
+        if (game.phase === 'menu') begin();
+        game.triggerAtomicCleave();
+      }
+    });
     if (params.has('level')) (debug as unknown as { setLevel(l: number): void }).setLevel(Number(params.get('level')));
     if (params.get('autostart') === '1') {
       begin(Number(params.get('seed') ?? 3));

@@ -264,6 +264,55 @@ export class AudioEngine {
         this.tone(80, 0.45, 1.3, 'sawtooth', 0.5);
         this.burst(3200, 0.4, 0.5, 1.0, 'highpass');
         break;
+      case 'atomic_trigger':
+        // Time freeze: sub-bass drop and high shimmering resonance
+        this.tone(55, 0.5, 2.0, 'sine', 0.8);
+        this.tone(1760, 0.12, 1.5, 'triangle', 2.0, 0.1);
+        this.burst(800, 0.5, 0.2, 0.8, 'bandpass');
+        break;
+      case 'atomic_fission':
+      case 'atomic_explosion':
+        // Massive nuclear explosion: heavy sub-bass 38 Hz rumble + roaring blast noise
+        this.tone(38, 0.85, 2.8, 'sine', 0.4);
+        this.tone(75, 0.6, 2.0, 'sawtooth', 0.3);
+        this.burst(140, 0.8, 0.9, 2.5, 'lowpass');
+        this.burst(1800, 1.2, 0.5, 1.2, 'bandpass', 0.05);
+        break;
+      case 'bridge_collapse':
+        // Timber splintering and cables snapping
+        this.burst(3200, 1.8, 0.7, 0.4, 'bandpass');
+        this.burst(650, 2.0, 0.6, 0.8, 'lowpass', 0.05);
+        this.tone(110, 0.4, 0.9, 'sawtooth', 0.6, 0.1);
+        break;
+      case 'demon_spawn':
+        // Eerie diving tone
+        this.tone(180, 0.15, 0.6, 'sawtooth', 1.5);
+        break;
+      case 'demon_slain':
+        // Satisfying demonic slice crunch + dissipate
+        this.burst(1800, 2.0, 0.45, 0.15, 'bandpass');
+        this.burst(240, 1.2, 0.4, 0.35, 'lowpass');
+        this.tone(90, 0.25, 0.4, 'sawtooth', 0.8);
+        break;
+      case 'angel_bless':
+        // Heavenly golden chime fanfare
+        [523.25, 659.25, 783.99, 1046.5, 1318.5].forEach((freq, idx) => {
+          this.tone(freq, 0.12, 1.4, 'sine', 1.5, idx * 0.07);
+        });
+        this.burst(4200, 0.6, 0.15, 0.8, 'highpass', 0.2);
+        break;
+      case 'angel_struck':
+        // Discordant glass shatter & sorrowful alarm
+        [466.16, 493.88, 739.99, 987.77].forEach((freq, idx) => {
+          this.tone(freq, 0.18, 0.9, 'triangle', 2.0, idx * 0.03);
+        });
+        this.burst(5500, 3.0, 0.5, 0.4, 'bandpass');
+        this.tone(85, 0.35, 1.2, 'sawtooth', 0.5, 0.1);
+        break;
+      case 'light_blade_start':
+        // Radiant hum
+        [440, 554.37, 659.25].forEach((f, i) => this.tone(f, 0.08, 1.2, 'sine', 1.0, i * 0.05));
+        break;
       case 'over':
         this.tone(110, 0.3, 2.2, 'sine', 0.5);
         break;
