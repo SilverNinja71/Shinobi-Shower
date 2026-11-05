@@ -8,7 +8,7 @@ export interface SandboxPanelHandlers {
 
 export class SandboxPanel {
   private readonly game: Game;
-  private readonly save: SaveData;
+  readonly save: SaveData;
   private readonly handlers: SandboxPanelHandlers;
   private container!: HTMLElement;
   private toggleBtn!: HTMLButtonElement;
@@ -378,7 +378,6 @@ export class SandboxPanel {
     });
 
     el.querySelector('#sb-weather-lightning')?.addEventListener('click', () => {
-      this.game.storm.triggerLightning(this.game.warrior.x);
       this.game.events.push({ type: 'lightning', x: this.game.warrior.x, power: 1.5 });
       this.notify('Lightning Strike Summoned');
     });
@@ -388,19 +387,16 @@ export class SandboxPanel {
       this.game.waves.weights.rain = 1.0;
       this.game.waves.weights.hail = 0;
       this.game.waves.weights.snow = 0;
-      this.game.waves.intensity = 0.6;
       this.notify('Weather: Gentle Rain Mist');
     });
 
     el.querySelector('#sb-weather-storm')?.addEventListener('click', () => {
       this.game.waves.weights.rain = 2.5;
-      this.game.waves.intensity = 1.8;
       this.notify('Weather: Torrential Downpour');
     });
 
     el.querySelector('#sb-weather-hail')?.addEventListener('click', () => {
       this.game.waves.weights.hail = 2.0;
-      this.game.waves.intensity = 1.5;
       for (let i = 0; i < 8; i++) {
         this.game.spawn('hail', this.game.warrior.x + (Math.random() * 12 - 6), 6 + Math.random() * 3, 0.08);
       }
@@ -409,7 +405,6 @@ export class SandboxPanel {
 
     el.querySelector('#sb-weather-blizzard')?.addEventListener('click', () => {
       this.game.waves.weights.snow = 3.0;
-      this.game.waves.intensity = 2.0;
       this.notify('Weather: Mountain Blizzard');
     });
 

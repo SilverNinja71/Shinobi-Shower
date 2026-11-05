@@ -3,7 +3,6 @@ import assert from 'node:assert/strict';
 import { Game } from '../src/core/Game.ts';
 import { isSandboxUnlocked } from '../src/core/Save.ts';
 import type { SaveData } from '../src/core/Save.ts';
-import { BRIDGE_LENGTH } from '../src/scene/SuspensionBridge.ts';
 
 test('Sandbox is locked at 100 deaths or fewer, and unlocks at 101+ deaths', () => {
   const saveUnder: SaveData = { level: 1, exp: 0, disabled: [], bestWave: 0, bestTime: 0, deaths: 100 };

@@ -210,7 +210,7 @@ async function boot(): Promise<void> {
   renderer.domElement.id = 'view';
   const assets = await Assets.load(renderer, (p) => screens.showLoading(p));
   view = new GameRenderer(stage, renderer, assets, chooseQuality());
-  input.aimConverter = (cx, cy) => view?.screenToGame(cx, cy) ?? null;
+  input.aimConverter = (cx, cy) => (view ? view.screenToGame(cx, cy) : { x: 18, y: 1.5 });
   screens.hideLoading();
 
   const params = new URLSearchParams(location.search);
@@ -313,8 +313,8 @@ async function boot(): Promise<void> {
           t += dt;
           game.cutscene.update(dt);
           for (const ev of game.cutscene.events) {
-            if (ev.type === 'atomic_fission') game.events.push({ type: 'atomic_fission', time: ev.time, x: ev.x, y: ev.y });
-            if (ev.type === 'bridge_shatter') game.events.push({ type: 'bridge_collapse', time: ev.time, x: ev.x, y: ev.y });
+            if (ev.type === 'atomic_fission') game.events.push({ type: 'atomic_fission', x: ev.x, y: ev.y });
+            if (ev.type === 'bridge_shatter') game.events.push({ type: 'bridge_collapse' });
           }
           game.cutscene.events.length = 0;
         }

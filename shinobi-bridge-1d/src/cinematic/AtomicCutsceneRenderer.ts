@@ -32,7 +32,6 @@ function buildKatanaBladeGeometry(): THREE.BufferGeometry {
   const bladeWidth = 0.24;
   const spineThick = 0.022;
   const ridgeThick = 0.032;
-  const edgeThick = 0.003;
   const soriMax = 0.09;
 
   for (let i = 0; i <= segments; i++) {
@@ -86,7 +85,7 @@ function buildKatanaBladeGeometry(): THREE.BufferGeometry {
  * 6. Ascend: Skyward ascension into the heavenly realm.
  */
 export class AtomicCutsceneRenderer implements RenderModule {
-  private readonly ctx: RenderContext;
+  readonly ctx: RenderContext;
   private readonly group = new THREE.Group();
 
   // Atom 3D visual elements

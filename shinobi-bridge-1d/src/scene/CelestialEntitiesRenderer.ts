@@ -1,6 +1,5 @@
 import * as THREE from 'three';
 import type { Game, GameEvent } from '../core/Game.ts';
-import type { Demon, Angel } from '../celestial/CelestialBattle.ts';
 import type { RenderContext, RenderModule } from '../render/RenderContext.ts';
 import { worldX } from '../render/RenderContext.ts';
 
@@ -459,13 +458,13 @@ export class CelestialEntitiesRenderer implements RenderModule {
     };
   }
 
-  handleEvent(e: GameEvent, game: Game): void {
+  handleEvent(e: GameEvent, _game?: Game): void {
     if (e.type === 'celestial_start') {
       this.active = true;
       this.group.visible = true;
     } else if (e.type === 'demon_slain') {
       this.spawnParticleBurst(worldX(e.x), e.y, 0xff2200, 36);
-    } else if (e.type === 'angel_blessing') {
+    } else if (e.type === 'angel_bless') {
       this.spawnParticleBurst(worldX(e.x), e.y, 0xfff0aa, 48);
     } else if (e.type === 'angel_struck') {
       this.spawnParticleBurst(worldX(e.x), e.y, 0xff5533, 40);
@@ -592,7 +591,7 @@ export class CelestialEntitiesRenderer implements RenderModule {
     }
 
     // Light Blade Visual
-    const hasLightBlade = celestial.hasLightBlade;
+    const hasLightBlade = celestial.lightBladeActive;
     this.lightBladeAura.visible = hasLightBlade;
     this.lightBladeBeam.visible = hasLightBlade;
     if (hasLightBlade) {

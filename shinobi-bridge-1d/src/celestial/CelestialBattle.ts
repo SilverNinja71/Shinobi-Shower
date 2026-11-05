@@ -96,7 +96,7 @@ export class CelestialBattle {
   private spawnCooldown = 1.5;
   private angelCooldown = 4.0;
 
-  start(warriorX = 0): void {
+  start(_warriorX = 0): void {
     this.active = true;
     this.time = 0;
     this.wave = 1;
