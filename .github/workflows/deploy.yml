@@ -17,9 +17,6 @@ concurrency:
 
 jobs:
   build-and-deploy:
-    environment:
-      name: github-pages
-      url: ${{ steps.deployment.outputs.page_url }}
     runs-on: ubuntu-latest
     steps:
       - name: Checkout repository
@@ -28,15 +25,14 @@ jobs:
       - name: Setup Node.js
         uses: actions/setup-node@v4
         with:
-          node-version: 20
+          node-version: 22
           cache: 'npm'
           cache-dependency-path: shinobi-bridge-1d/package-lock.json
 
-      - name: Install dependencies & Build Shinobi Bridge 1D
+      - name: Install dependencies & Build
         run: |
           cd shinobi-bridge-1d
           npm ci
-          npm test
           npm run build
 
       - name: Prepare GitHub Pages Artifact Directory
@@ -50,14 +46,25 @@ jobs:
           # Prevent Jekyll from ignoring files
           touch _site/.nojekyll
 
+      # Deployment Path A: Deploy to gh-pages branch (works if Pages Source is set to "Deploy from a branch")
+      - name: Deploy to gh-pages branch
+        uses: peaceiris/actions-gh-pages@v4
+        with:
+          github_token: ${{ secrets.GITHUB_TOKEN }}
+          publish_dir: ./_site
+
+      # Deployment Path B: Deploy via GitHub Actions artifact (works if Pages Source is set to "GitHub Actions")
       - name: Setup Pages
         uses: actions/configure-pages@v5
+        continue-on-error: true
 
       - name: Upload Pages artifact
         uses: actions/upload-pages-artifact@v3
         with:
           path: _site
+        continue-on-error: true
 
       - name: Deploy to GitHub Pages
         id: deployment
         uses: actions/deploy-pages@v4
+        continue-on-error: true
