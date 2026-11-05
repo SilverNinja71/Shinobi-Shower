@@ -11,3 +11,4 @@ void main() {
   vViewDir = normalize(cameraPosition - worldPos.xyz);
   gl_Position = projectionMatrix * viewMatrix * worldPos;
 }
+

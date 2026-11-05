@@ -29,3 +29,4 @@ void main() {
   float alpha = clamp((fresnel * 0.7 + waveInterference * 0.3) * uOpacity, 0.0, 1.0);
   gl_FragColor = vec4(col, alpha);
 }
+

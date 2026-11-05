@@ -8,14 +8,14 @@ import {
   stanceFor,
 } from '../progression/StanceModifiers.ts';
 import type { Perk, Stance } from '../progression/StanceModifiers.ts';
-import { WaveDirector } from '../progression/WaveDirector.ts';
+import { WaveDirector, planWave, waveDuration } from '../progression/WaveDirector.ts';
 import { SnowAccumulator } from '../scene/SnowAccumulator.ts';
 import { BRIDGE_LENGTH, PLANK_PITCH, SuspensionBridge } from '../scene/SuspensionBridge.ts';
 import { DynamicStormSystem } from '../weather/DynamicStormSystem.ts';
 import { PROFILES, clumpSnow, damageOf, expOf, extents, makeDrop, moveDrops, sweptHits } from '../weather/PrecipitationDroplet.ts';
 import type { Drop, DropKind } from '../weather/PrecipitationDroplet.ts';
 import { KatanaSlash, SWEET_HALF_WIDTH, SWEET_HIGH, SWEET_LOW, WAKE_MAX_R } from '../warrior/KatanaSlash.ts';
-import { HALF_WIDTH, KICK_DEPTH, WarriorController } from '../warrior/WarriorController.ts';
+import { HALF_WIDTH, KICK_DEPTH, WarriorController, STAMINA_MAX } from '../warrior/WarriorController.ts';
 import { AtomicCutsceneSim } from '../cinematic/AtomicCutsceneSim.ts';
 import { CelestialBattle } from '../celestial/CelestialBattle.ts';
 import type { DemonKind } from '../celestial/CelestialBattle.ts';
@@ -26,6 +26,16 @@ export const HITSTOP = 0.06;
 const RAIN_MELT = 0.006;
 
 export type Phase = 'menu' | 'playing' | 'paused' | 'cutscene' | 'celestial' | 'over';
+
+export interface SandboxOptions {
+  active: boolean;
+  godMode: boolean;
+  infiniteStamina: boolean;
+  rapidSlash: boolean;
+  flameBlade: boolean;
+  lightBlade: boolean;
+  timeScale: number;
+}
 
 export interface FrameInput {
   moveX: number;
@@ -101,6 +111,15 @@ export class Game {
   katana = new KatanaSlash();
   readonly cutscene = new AtomicCutsceneSim();
   readonly celestial = new CelestialBattle();
+  sandbox: SandboxOptions = {
+    active: false,
+    godMode: false,
+    infiniteStamina: false,
+    rapidSlash: false,
+    flameBlade: false,
+    lightBlade: false,
+    timeScale: 1.0,
+  };
   levels: LevelManager;
   disabled: Set<Perk>;
   stance: Stance;
@@ -152,6 +171,74 @@ export class Game {
     this.events.push({ type: 'atomic_trigger', x: this.warrior.x, y: this.feetY });
   }
 
+  repairBridge(): void {
+    for (const p of this.bridge.planks) {
+      p.health = 4;
+      p.broken = false;
+      p.brokenAge = 0;
+    }
+  }
+
+  breakRandomPlanks(count = 6): void {
+    const indices = Array.from({ length: this.bridge.planks.length }, (_, i) => i);
+    indices.sort(() => Math.random() - 0.5);
+    for (let i = 0; i < Math.min(count, indices.length); i++) {
+      const p = this.bridge.planks[indices[i]];
+      p.broken = true;
+      p.health = 0;
+      this.events.push({ type: 'plank', index: p.index, x: p.x, y: this.bridge.deckY(p.x), damage: 'break', health: 0 });
+    }
+  }
+
+  clearSnow(): void {
+    const area = this.snow.clear(0, BRIDGE_LENGTH);
+    this.stats.snowCleared += area;
+  }
+
+  fillSnow(depth = 0.35): void {
+    this.snow.depth.fill(depth);
+  }
+
+  clearStorm(): void {
+    this.drops.length = 0;
+    this.storm.drops.length = 0;
+  }
+
+  jumpWave(wave: number, t = 5): void {
+    this.waves.wave = wave;
+    this.waves.duration = waveDuration(wave);
+    this.waves.fronts = planWave(wave, this.seed);
+    this.waves.t = t;
+    this.events.push({ type: 'wave', wave, name: this.waves.title, duration: this.waves.duration });
+  }
+
+  warpToCelestial(): void {
+    if (this.phase === 'menu') this.start();
+    this.phase = 'celestial';
+    this.celestial.start(this.warrior.x);
+    this.events.push({ type: 'celestial_start' });
+  }
+
+  warpToPeak(): void {
+    if (this.phase === 'menu') this.start();
+    this.phase = 'playing';
+    this.celestial.active = false;
+  }
+
+  spawnDemon(kind: DemonKind = 'imp'): ReturnType<CelestialBattle['spawnDemon']> {
+    if (!this.celestial.active) this.warpToCelestial();
+    const d = this.celestial.spawnDemon(kind, this.warrior.x + (Math.random() * 8 - 4), 3.8);
+    this.events.push({ type: 'demon_spawn', id: d.id, x: d.x, y: d.y, kind: d.kind });
+    return d;
+  }
+
+  spawnAngel(): ReturnType<CelestialBattle['spawnAngel']> {
+    if (!this.celestial.active) this.warpToCelestial();
+    const a = this.celestial.spawnAngel(this.warrior.x + (Math.random() * 4 - 2));
+    this.events.push({ type: 'angel_spawn', id: a.id, x: a.x, y: a.y });
+    return a;
+  }
+
   start(seed = (Math.random() * 2 ** 31) | 0): void {
     this.seed = seed;
     this.refreshStance();
@@ -188,6 +275,24 @@ export class Game {
   }
 
   step(dt: number, input: FrameInput): void {
+    if (this.sandbox.active) {
+      if (this.sandbox.godMode) {
+        this.dryness = 100;
+        this.shieldUp = true;
+      }
+      if (this.sandbox.infiniteStamina) {
+        this.warrior.stamina = STAMINA_MAX;
+      }
+      if (this.sandbox.flameBlade) {
+        this.stance.flame = true;
+      }
+      if (this.sandbox.rapidSlash) {
+        this.katana.cooldown = Math.min(this.katana.cooldown, 0.05);
+      }
+      if (this.sandbox.lightBlade) {
+        this.celestial.lightBladeTimer = Math.max(this.celestial.lightBladeTimer, 10);
+      }
+    }
     if (this.phase === 'cutscene') {
       this.stepCutscene(dt);
       return;
@@ -214,6 +319,9 @@ export class Game {
     this.bridge.update(dt, this.storm.wind, w.x);
 
     const moved = w.update(dt, { moveX: input.moveX, dash: input.dashPressed, kick: input.kickPressed }, { stance: s, bridge: this.bridge, snow: this.snow, exposed: this.exposed });
+    if (this.sandbox.active && this.sandbox.infiniteStamina) {
+      w.stamina = STAMINA_MAX;
+    }
     if (moved.dashed) {
       this.bridge.impulse(w.x, 0.12);
       this.events.push({ type: 'dash', x: w.x, dir: w.dashDir });
@@ -264,9 +372,13 @@ export class Game {
 
     this.storm.drops.splice(0, this.storm.drops.length, ...this.drops.filter((d) => !d.dead));
     if (this.dryness <= 0) {
-      this.dryness = 0;
-      this.phase = 'over';
-      this.events.push({ type: 'over' });
+      if (this.sandbox.active && this.sandbox.godMode) {
+        this.dryness = 100;
+      } else {
+        this.dryness = 0;
+        this.phase = 'over';
+        this.events.push({ type: 'over' });
+      }
     }
   }
 
@@ -299,6 +411,9 @@ export class Game {
     const s = this.stance;
 
     const moved = w.update(dt, { moveX: input.moveX, dash: input.dashPressed, kick: input.kickPressed }, { stance: s, bridge: this.bridge, snow: this.snow, exposed: this.exposed });
+    if (this.sandbox.active && this.sandbox.infiniteStamina) {
+      w.stamina = STAMINA_MAX;
+    }
     if (moved.dashed) {
       this.events.push({ type: 'dash', x: w.x, dir: w.dashDir });
     }
@@ -349,9 +464,13 @@ export class Game {
     this.celestial.events.length = 0;
 
     if (this.dryness <= 0) {
-      this.dryness = 0;
-      this.phase = 'over';
-      this.events.push({ type: 'over' });
+      if (this.sandbox.active && this.sandbox.godMode) {
+        this.dryness = 100;
+      } else {
+        this.dryness = 0;
+        this.phase = 'over';
+        this.events.push({ type: 'over' });
+      }
     }
   }
 

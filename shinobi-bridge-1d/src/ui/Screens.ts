@@ -1,4 +1,5 @@
 import type { Game } from '../core/Game.ts';
+import { isSandboxUnlocked } from '../core/Save.ts';
 import type { SaveData } from '../core/Save.ts';
 import { expToNext, titleFor } from '../progression/LevelManager.ts';
 import { PERKS, tierFor } from '../progression/StanceModifiers.ts';
@@ -12,6 +13,7 @@ export interface ScreenHandlers {
   onMenu(): void;
   onMute(): void;
   onToggleStance(id: Perk, on: boolean): void;
+  onSandbox?(): void;
 }
 
 const byId = (id: string) => document.getElementById(id) as HTMLElement;
@@ -63,7 +65,33 @@ export class Screens {
     byId('menu-title').textContent = titleFor(lv.level);
     byId('menu-exp').style.transform = `scaleX(${lv.progress})`;
     byId('menu-exp-text').textContent = lv.level >= 50 ? 'Grandmaster' : `${lv.exp} / ${expToNext(lv.level)} mastery`;
-    byId('menu-best').textContent = save.bestWave > 0 ? `Best: wave ${save.bestWave} · ${clock(save.bestTime)}` : '';
+    const deathTally = (save.deaths || 0) > 100
+      ? ` · 💀 ${save.deaths} Deaths (Sandbox Unlocked)`
+      : (save.deaths || 0) > 0 ? ` · 💀 ${save.deaths}/100 Deaths` : '';
+    byId('menu-best').textContent = (save.bestWave > 0 ? `Best: wave ${save.bestWave} · ${clock(save.bestTime)}` : '') + deathTally;
+
+    // Sandbox button on Menu
+    const actions = document.querySelector('#menu .actions');
+    let sbBtn = document.getElementById('menu-sandbox') as HTMLButtonElement | null;
+    if (isSandboxUnlocked(save)) {
+      if (!sbBtn && actions) {
+        sbBtn = document.createElement('button');
+        sbBtn.id = 'menu-sandbox';
+        sbBtn.className = 'go';
+        sbBtn.type = 'button';
+        sbBtn.style.background = 'linear-gradient(135deg, #d8b45a, #ff9a4a)';
+        sbBtn.style.boxShadow = '0 0 28px rgba(216, 180, 90, 0.45)';
+        sbBtn.style.color = '#120a04';
+        sbBtn.textContent = '⛩️ Enter Sandbox';
+        sbBtn.addEventListener('click', () => this.handlers.onSandbox?.());
+        actions.appendChild(sbBtn);
+      } else if (sbBtn) {
+        sbBtn.hidden = false;
+      }
+    } else if (sbBtn) {
+      sbBtn.hidden = true;
+    }
+
     this.renderStances(game);
     this.renderTiers(lv.level);
     this.only('menu');
@@ -145,18 +173,23 @@ export class Screens {
     byId('resume').focus({ preventScroll: true });
   }
 
-  showOver(game: Game, _save: SaveData): void {
+  showOver(game: Game, save: SaveData, unlockedSandboxNow = false): void {
     const st = game.stats;
     const wave = game.waves.wave;
     const front = game.waves.frontNow || game.waves.title || 'storm';
-    byId('over-title').textContent = `Swept from the peak at wave ${wave}`;
-    const gained = game.levels.level - st.startLevel;
-    byId('over-levels').textContent =
-      game.levels.level >= 50
-        ? 'Apex Sovereign, level 50'
-        : gained > 0
-          ? `Level ${st.startLevel} → ${game.levels.level} · ${titleFor(game.levels.level)}`
-          : `The ${front.toLowerCase()} took you. ${expToNext(game.levels.level) - game.levels.exp} mastery to level ${game.levels.level + 1}.`;
+    if (unlockedSandboxNow) {
+      byId('over-title').textContent = '⛩️ 101 DEFEATS: ASCENDANT SANDBOX UNLOCKED';
+      byId('over-levels').textContent = 'You have fallen 100 times. Death holds no dominion here. The hidden Sandbox mode is now awakened!';
+    } else {
+      byId('over-title').textContent = `Swept from the peak at wave ${wave}`;
+      const gained = game.levels.level - st.startLevel;
+      byId('over-levels').textContent =
+        game.levels.level >= 50
+          ? 'Apex Sovereign, level 50'
+          : gained > 0
+            ? `Level ${st.startLevel} → ${game.levels.level} · ${titleFor(game.levels.level)}`
+            : `The ${front.toLowerCase()} took you. ${expToNext(game.levels.level) - game.levels.exp} mastery to level ${game.levels.level + 1}.`;
+    }
     byId('over-time').textContent = clock(st.time);
     byId('over-waves').textContent = String(st.wavesCleared);
     byId('over-cut').textContent = String(st.cut);
@@ -164,6 +197,43 @@ export class Screens {
     byId('over-combo').textContent = String(st.bestCombo);
     byId('over-planks').textContent = String(st.planksLost);
     byId('over-exp').textContent = `+${st.exp}`;
+
+    // Add deaths to results if not present
+    let deathsEl = document.getElementById('over-deaths');
+    if (!deathsEl) {
+      const results = document.querySelector('#over .results');
+      if (results) {
+        const div = document.createElement('div');
+        div.innerHTML = `<span class="label">Total Deaths</span><b id="over-deaths" style="color: ${(save.deaths || 0) > 100 ? 'var(--gold)' : 'var(--blood)'};">${save.deaths || 0}</b>`;
+        results.appendChild(div);
+      }
+    } else {
+      deathsEl.textContent = String(save.deaths || 0);
+      deathsEl.style.color = (save.deaths || 0) > 100 ? 'var(--gold)' : 'var(--blood)';
+    }
+
+    // Sandbox button on Over screen
+    const actions = document.querySelector('#over .actions');
+    let sbBtn = document.getElementById('over-sandbox') as HTMLButtonElement | null;
+    if (isSandboxUnlocked(save)) {
+      if (!sbBtn && actions) {
+        sbBtn = document.createElement('button');
+        sbBtn.id = 'over-sandbox';
+        sbBtn.className = 'go';
+        sbBtn.type = 'button';
+        sbBtn.style.background = 'linear-gradient(135deg, #d8b45a, #ff9a4a)';
+        sbBtn.style.boxShadow = '0 0 28px rgba(216, 180, 90, 0.45)';
+        sbBtn.style.color = '#120a04';
+        sbBtn.textContent = '⛩️ Enter Sandbox';
+        sbBtn.addEventListener('click', () => this.handlers.onSandbox?.());
+        actions.appendChild(sbBtn);
+      } else if (sbBtn) {
+        sbBtn.hidden = false;
+      }
+    } else if (sbBtn) {
+      sbBtn.hidden = true;
+    }
+
     this.only('over');
     byId('again').focus({ preventScroll: true });
   }

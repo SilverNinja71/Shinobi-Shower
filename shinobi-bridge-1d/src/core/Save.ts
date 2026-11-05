@@ -9,9 +9,18 @@ export interface SaveData {
   disabled: Perk[];
   bestWave: number;
   bestTime: number;
+  /** Total times the warrior has fallen in battle. */
+  deaths: number;
+  /** Explicit unlock flag for the hidden sandbox. */
+  sandboxUnlocked?: boolean;
 }
 
-const FRESH: SaveData = { level: 1, exp: 0, disabled: [], bestWave: 0, bestTime: 0 };
+const FRESH: SaveData = { level: 1, exp: 0, disabled: [], bestWave: 0, bestTime: 0, deaths: 0, sandboxUnlocked: false };
+
+/** Returns true if the player has unlocked the secret sandbox (>100 deaths or explicit unlock). */
+export function isSandboxUnlocked(save: SaveData): boolean {
+  return (save.deaths || 0) > 100 || !!save.sandboxUnlocked;
+}
 
 /** Progress lives in this browser only. Storage can be blocked; then it lasts for the visit. */
 export function loadSave(): SaveData {
