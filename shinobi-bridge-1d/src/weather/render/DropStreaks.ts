@@ -38,10 +38,10 @@ export class DropStreaks {
         uTime: shared.time,
         uLightning: shared.lightning,
         uViewport: shared.viewport,
-        // Cyan-white, well past the cosmetic rain, so bloom gives the threats a halo.
-        uRainColor: { value: new THREE.Color(0.8, 0.95, 1.25).multiplyScalar(2.6) },
-        uGlintColor: { value: new THREE.Color(0.85, 0.95, 1.1).multiplyScalar(2.2) },
-        uTrailColor: { value: new THREE.Color(0.45, 0.6, 0.85).multiplyScalar(0.55) },
+        // Pure solid incandescent white for gameplay slash targets
+        uRainColor: { value: new THREE.Color(1.0, 1.0, 1.0).multiplyScalar(3.8) },
+        uGlintColor: { value: new THREE.Color(1.0, 1.0, 1.0).multiplyScalar(3.2) },
+        uTrailColor: { value: new THREE.Color(0.85, 0.92, 1.0).multiplyScalar(0.9) },
       },
     });
     this.mesh = new THREE.InstancedMesh(geometry, material, capacity);

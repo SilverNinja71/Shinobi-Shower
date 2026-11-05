@@ -14,8 +14,6 @@ import { SnowFall } from './render/SnowFall.ts';
 import { Splashes } from './render/Splashes.ts';
 import { StormMarks } from './render/StormMarks.ts';
 
-/** Mist drizzle falls this fast (m/s), as the simulation's drizzle does. */
-const DRIZZLE_FALL = 4.5;
 /** Where the moon is when the scene has no shadow-casting directional light: high, behind the bridge. */
 const DEFAULT_MOON = new THREE.Vector3(0.2, 0.75, -0.62).normalize();
 
@@ -53,9 +51,6 @@ export class StormRenderer implements RenderModule {
   private readonly splashes: Splashes;
   /** This frame's hailstones, gathered for the warnings (reused, never reallocated). */
   private readonly hailNow: Drop[] = [];
-  /** The cosmetic rain's velocity eases after the simulation's, so a wind reversal swings it through. */
-  private vx = 0;
-  private vy = -30;
 
   constructor(ctx: RenderContext) {
     this.ctx = ctx;
@@ -128,9 +123,21 @@ export class StormRenderer implements RenderModule {
   }
 
   update(dt: number, game: Game): void {
-    const u = this.ctx.uniforms;
+    // In celestial realm (Heaven), mortal weather is completely absent
+    if (game.phase === 'celestial') {
+      this.rain.mesh.visible = false;
+      this.drizzle.mesh.visible = false;
+      this.snowfall.mesh.visible = false;
+      this.mist.mesh.visible = false;
+      this.streaks.mesh.visible = false;
+      this.flakes.mesh.visible = false;
+      this.clumps.mesh.visible = false;
+      this.hail.mesh.visible = false;
+      this.marks.mesh.visible = false;
+      return;
+    }
+
     const camera = this.ctx.camera;
-    const cameraX = camera.position.x;
     this.ctx.renderer.getDrawingBufferSize(this.viewport.value);
     // GameRenderer has just moved the camera; its matrices catch up here rather than at render time.
     camera.updateMatrixWorld();
@@ -141,15 +148,11 @@ export class StormRenderer implements RenderModule {
     if (this.moon) this.moonDir.value.subVectors(this.moon.position, this.moon.target.position).normalize();
     else this.moonDir.value.copy(DEFAULT_MOON);
 
-    const k = Math.min(1, dt * 5);
-    this.vx += (u.uRainDir.value * u.uRainSpeed.value * Math.sin(u.uRainAngle.value) - this.vx) * k;
-    this.vy += (-u.uRainSpeed.value * Math.cos(u.uRainAngle.value) - this.vy) * k;
-    const rain = u.uRain.value;
-    this.curtains.update(dt, game.storm.curtains, -this.vy, Math.min(1, 0.35 + rain));
-    this.rain.update(dt, this.vx, this.vy, rain, cameraX, this.curtains.live);
-    this.drizzle.update(dt, u.uWind.value * 0.8, -DRIZZLE_FALL, u.uMist.value * 0.9, cameraX);
-    this.snowfall.update(dt, u.uWind.value, u.uSnow.value, cameraX);
-    this.mist.update(dt, u.uWind.value, u.uMist.value, cameraX);
+    // Background effect weather is turned off so only critical, pure-white slashable drops exist
+    this.rain.mesh.visible = false;
+    this.drizzle.mesh.visible = false;
+    this.snowfall.mesh.visible = false;
+    this.mist.mesh.visible = false;
 
     this.streaks.begin();
     this.flakes.begin();

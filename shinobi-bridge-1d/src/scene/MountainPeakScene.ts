@@ -156,8 +156,21 @@ export class MountainPeakScene implements RenderModule {
     this.moonLight.target.updateMatrixWorld();
   }
 
+  private setEnvironmentVisible(visible: boolean): void {
+    this.moonLight.visible = visible;
+    this.hemi.visible = visible;
+    this.flashLight.visible = visible;
+    this.ctx.scene.traverse((obj) => {
+      if (obj.name && obj.name.startsWith('env-') && !obj.name.startsWith('celestial')) {
+        obj.visible = visible;
+      }
+    });
+  }
+
   update(dt: number, game: Game): void {
-    if (game.phase === 'celestial') return;
+    const isCelestial = game.phase === 'celestial';
+    this.setEnvironmentVisible(!isCelestial);
+    if (isCelestial) return;
     const u = this.ctx.uniforms;
     const cam = this.ctx.camera;
 

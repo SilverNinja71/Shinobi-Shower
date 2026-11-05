@@ -15,15 +15,15 @@ void main() {
   float y = vUv.y;
   vec3 light;
   if (vKind < 0.5) {
-    // A white-hot core inside a cyan halo, brightest at the head.
-    float core = exp(-x * x * 14.0);
-    float halo = exp(-x * x * 2.5) * 0.3;
-    float along = smoothstep(0.0, 0.05, y) * (1.0 - smoothstep(0.35, 1.0, y)) * (1.0 - 0.5 * y);
-    float bead = exp(-y * y * 160.0) * exp(-x * x * 4.0);
-    light = uRainColor * (core * along + bead * 1.4) + uRainColor * vec3(0.55, 0.85, 1.0) * halo * along;
+    // Pure radiant white blade-target rain: completely white core and blazing head bead, no colored tint
+    float core = exp(-x * x * 20.0);
+    float halo = exp(-x * x * 3.5) * 0.4;
+    float along = smoothstep(0.0, 0.04, y) * (1.0 - smoothstep(0.35, 1.0, y)) * (1.0 - 0.4 * y);
+    float bead = exp(-y * y * 180.0) * exp(-x * x * 6.0);
+    light = uRainColor * (core * along * 3.5 + bead * 4.8 + halo * along * 1.2);
   } else if (vKind < 1.5) {
-    float spark = exp(-x * x * 6.0) * (1.0 - smoothstep(0.0, 1.0, y)) * smoothstep(-0.05, 0.15, y);
-    light = uGlintColor * (spark + exp(-x * x * 1.5) * 0.25 * (1.0 - y));
+    float spark = exp(-x * x * 8.0) * (1.0 - smoothstep(0.0, 1.0, y)) * smoothstep(-0.05, 0.15, y);
+    light = uGlintColor * (spark * 3.2 + exp(-x * x * 2.0) * 0.4 * (1.0 - y));
   } else {
     float smear = (1.0 - x * x) * smoothstep(0.0, 0.2, y) * (1.0 - y) * (1.0 - y);
     light = uTrailColor * smear;

@@ -17,9 +17,14 @@ export class CelestialScene implements RenderModule {
 
   // Celestial Environment Lighting
   private readonly sunLight: THREE.DirectionalLight;
+  private readonly fillLight: THREE.DirectionalLight;
   private readonly ambientHemi: THREE.HemisphereLight;
   private readonly sunDisc: THREE.Mesh;
   private readonly sunHalo: THREE.Mesh;
+  private readonly sunRays: THREE.Mesh;
+
+  // Sky dome with celestial dawn/twilight gradient
+  private readonly skyDome: THREE.Mesh;
 
   // Cloud floor meshes and custom volumetric cloud shader
   private readonly cloudMaterial: THREE.ShaderMaterial;
@@ -27,12 +32,14 @@ export class CelestialScene implements RenderModule {
 
   // Soft Crepuscular God Rays
   private readonly godRays: THREE.Mesh[] = [];
+  private readonly godRayMats: THREE.ShaderMaterial[] = [];
 
   // Distant Holy Mountain Silhouettes
   private readonly mountainSilhouettes: THREE.Mesh[] = [];
 
   // Floating sacred Torii gates & lanterns
   private readonly floatingStructures: THREE.Group[] = [];
+  private readonly lanternLights: THREE.PointLight[] = [];
 
   // Golden stardust / divine sakura motes
   private readonly motes: THREE.Points;
@@ -47,17 +54,61 @@ export class CelestialScene implements RenderModule {
     ctx.scene.add(this.group);
     this.group.visible = false;
 
-    // 1. Divine Sunlight & Ambient Fill
-    this.sunLight = new THREE.DirectionalLight(0xffeedd, 2.0);
-    this.sunLight.position.set(-22, 28, 20);
+    // 1. Celestial Sky Dome (Deep twilight royal violet to golden dawn horizon)
+    const skyGeo = new THREE.SphereGeometry(680, 32, 20);
+    const skyMat = new THREE.ShaderMaterial({
+      vertexShader: `
+        varying vec3 vWorldPos;
+        void main() {
+          vWorldPos = (modelMatrix * vec4(position, 1.0)).xyz;
+          gl_Position = projectionMatrix * modelViewMatrix * vec4(position, 1.0);
+        }
+      `,
+      fragmentShader: `
+        varying vec3 vWorldPos;
+        void main() {
+          float h = normalize(vWorldPos).y;
+          // Zenith (deep celestial violet) -> Mid (rose twilight & amber) -> Horizon (golden solar dawn)
+          vec3 zenith = vec3(0.08, 0.04, 0.15);
+          vec3 upper = vec3(0.35, 0.12, 0.22);
+          vec3 mid = vec3(0.72, 0.25, 0.24);
+          vec3 dawn = vec3(0.98, 0.52, 0.24);
+          vec3 horizon = vec3(1.0, 0.82, 0.44);
+
+          vec3 col = mix(horizon, dawn, smoothstep(-0.06, 0.14, h));
+          col = mix(col, mid, smoothstep(0.12, 0.38, h));
+          col = mix(col, upper, smoothstep(0.35, 0.65, h));
+          col = mix(col, zenith, smoothstep(0.60, 0.96, h));
+
+          gl_FragColor = vec4(col, 1.0);
+        }
+      `,
+      side: THREE.BackSide,
+      depthWrite: false,
+    });
+    this.skyDome = new THREE.Mesh(skyGeo, skyMat);
+    this.skyDome.name = 'celestial_sky_dome';
+    this.group.add(this.skyDome);
+
+    // 2. Divine Sunlight & Ambient Fill
+    this.sunLight = new THREE.DirectionalLight(0xfffaee, 2.6);
+    this.sunLight.position.set(-25, 28, 20);
+    this.sunLight.castShadow = true;
+    this.sunLight.shadow.mapSize.set(1024, 1024);
+    this.sunLight.shadow.bias = -0.0003;
     this.group.add(this.sunLight);
 
+    // Front-fill directional light from camera side so character PBR & normal maps are brilliant
+    this.fillLight = new THREE.DirectionalLight(0xffecd4, 1.35);
+    this.fillLight.position.set(0, 10, 24);
+    this.group.add(this.fillLight);
+
     // Warm golden sky light with deep twilight dusk bounce
-    this.ambientHemi = new THREE.HemisphereLight(0xffc277, 0x3d1b28, 1.1);
+    this.ambientHemi = new THREE.HemisphereLight(0xffc570, 0x3d1b28, 1.25);
     this.group.add(this.ambientHemi);
 
-    // 2. Radiant Sun Disc & Multi-tier Golden Halo
-    const sunGeo = new THREE.CircleGeometry(4.8, 32);
+    // 3. Radiant Sun Disc, Multi-tier Golden Halo & Solar Corona
+    const sunGeo = new THREE.CircleGeometry(5.2, 32);
     const sunMat = new THREE.MeshBasicMaterial({
       color: 0xfffae8,
       side: THREE.DoubleSide,
@@ -67,11 +118,11 @@ export class CelestialScene implements RenderModule {
     this.sunDisc.position.set(-36, 26, -55);
     this.group.add(this.sunDisc);
 
-    const haloGeo = new THREE.RingGeometry(4.8, 22.0, 32);
+    const haloGeo = new THREE.RingGeometry(5.2, 26.0, 32);
     const haloMat = new THREE.MeshBasicMaterial({
       color: 0xffb844,
       transparent: true,
-      opacity: 0.28,
+      opacity: 0.32,
       blending: THREE.AdditiveBlending,
       side: THREE.DoubleSide,
       depthWrite: false,
@@ -80,25 +131,38 @@ export class CelestialScene implements RenderModule {
     this.sunHalo.position.copy(this.sunDisc.position);
     this.group.add(this.sunHalo);
 
-    // 3. Volumetric Golden Cloud Ocean (Custom GLSL Shader)
+    const raysGeo = new THREE.RingGeometry(6.0, 36.0, 8);
+    const raysMat = new THREE.MeshBasicMaterial({
+      color: 0xffdf66,
+      transparent: true,
+      opacity: 0.16,
+      blending: THREE.AdditiveBlending,
+      side: THREE.DoubleSide,
+      depthWrite: false,
+    });
+    this.sunRays = new THREE.Mesh(raysGeo, raysMat);
+    this.sunRays.position.copy(this.sunDisc.position);
+    this.group.add(this.sunRays);
+
+    // 4. Volumetric Golden Cloud Ocean (Custom GLSL Shader)
     this.cloudMaterial = new THREE.ShaderMaterial({
       vertexShader: cloudVert,
       fragmentShader: cloudFrag,
       uniforms: {
         uTime: { value: 0 },
         uSunDir: { value: new THREE.Vector3(-0.6, 0.7, 0.4).normalize() },
-        uSunColor: { value: new THREE.Color(0xffcc66) }, // Warm solar gold
-        uCloudBaseColor: { value: new THREE.Color(0xd9752d) }, // Rich apricot gold
-        uCloudShadowColor: { value: new THREE.Color(0x381422) }, // Deep dusk violet shadow
+        uSunColor: { value: new THREE.Color(0xffdf80) }, // Radiant solar gold
+        uCloudBaseColor: { value: new THREE.Color(0xfcf0d8) }, // Warm luminous ivory cream
+        uCloudShadowColor: { value: new THREE.Color(0x4a1f33) }, // Deep dusk violet-rose shadow
       },
       side: THREE.FrontSide,
     });
 
     // Walking cloud deck (overlapping smooth domes forming a solid walking deck at y = 0)
-    const baseCloudGeo = new THREE.SphereGeometry(3.5, 24, 20);
-    for (let i = 0; i < 44; i++) {
+    const baseCloudGeo = new THREE.SphereGeometry(3.6, 24, 20);
+    for (let i = 0; i < 48; i++) {
       const mesh = new THREE.Mesh(baseCloudGeo, this.cloudMaterial);
-      const x = (i - 22) * 2.8 + (Math.random() - 0.5) * 1.5;
+      const x = (i - 24) * 2.6 + (Math.random() - 0.5) * 1.5;
       const y = -2.85 + (Math.random() - 0.5) * 0.35;
       const z = (Math.random() - 0.5) * 12;
       mesh.position.set(x, y, z);
@@ -111,10 +175,10 @@ export class CelestialScene implements RenderModule {
     }
 
     // Distant background cloud banks
-    const bgCloudGeo = new THREE.SphereGeometry(7.5, 16, 14);
-    for (let i = 0; i < 26; i++) {
+    const bgCloudGeo = new THREE.SphereGeometry(8.5, 18, 14);
+    for (let i = 0; i < 28; i++) {
       const mesh = new THREE.Mesh(bgCloudGeo, this.cloudMaterial);
-      const x = (i - 13) * 8.0 + (Math.random() - 0.5) * 4;
+      const x = (i - 14) * 8.0 + (Math.random() - 0.5) * 4;
       const y = -6.2 + Math.random() * 1.5;
       const z = -28 - Math.random() * 18;
       mesh.position.set(x, y, z);
@@ -123,11 +187,11 @@ export class CelestialScene implements RenderModule {
       this.group.add(mesh);
     }
 
-    // 4. Distant Holy Mountain Silhouettes (Deep Sapphire / Indigo with golden rim)
+    // 5. Distant Holy Mountain Silhouettes (Deep Sapphire / Indigo with golden rim)
     const slatePbr = ctx.assets.pbr('slate', 2, 2);
     const mtnGeo = new THREE.ConeGeometry(16, 26, 4);
     const mtnMat = new THREE.MeshStandardMaterial({
-      color: 0x161828, // Deep night sapphire
+      color: 0x161828,
       map: slatePbr.map,
       normalMap: slatePbr.normalMap,
       roughness: 0.85,
@@ -141,39 +205,71 @@ export class CelestialScene implements RenderModule {
       this.group.add(mtn);
     }
 
-    // 5. Soft Crepuscular God Rays (Extremely subtle, atmospheric ambient haze)
-    const rayGeo = new THREE.ConeGeometry(5.0, 55, 16, 1, true);
-    const rayMat = new THREE.MeshBasicMaterial({
-      color: 0xffe288,
-      transparent: true,
-      opacity: 0.022, // Soft cinematic volumetric haze
-      blending: THREE.AdditiveBlending,
-      side: THREE.DoubleSide,
-      depthWrite: false,
-    });
-    for (let i = 0; i < 5; i++) {
-      const ray = new THREE.Mesh(rayGeo, rayMat);
-      ray.position.set(-32 + i * 15, 26, -30 - i * 3);
-      ray.rotation.z = -0.3 + i * 0.07;
-      ray.rotation.x = 0.22;
+    // 6. Soft Crepuscular God Rays (Atmospheric light shafts with soft gaussian falloff)
+    const rayGeo = new THREE.PlaneGeometry(12.0, 52.0);
+    for (let i = 0; i < 6; i++) {
+      const mat = new THREE.ShaderMaterial({
+        vertexShader: `
+          varying vec2 vUv;
+          void main() {
+            vUv = uv;
+            gl_Position = projectionMatrix * modelViewMatrix * vec4(position, 1.0);
+          }
+        `,
+        fragmentShader: `
+          varying vec2 vUv;
+          uniform float uTime;
+          uniform float uIndex;
+          void main() {
+            float x = vUv.x * 2.0 - 1.0;
+            float y = vUv.y;
+            float horiz = exp(-x * x * 4.2);
+            float vert = smoothstep(0.0, 0.2, y) * (1.0 - smoothstep(0.65, 1.0, y));
+            float pulse = 0.85 + 0.15 * sin(uTime * 1.4 + uIndex * 1.3);
+            float alpha = horiz * vert * 0.13 * pulse;
+            vec3 col = vec3(1.0, 0.88, 0.55);
+            gl_FragColor = vec4(col * alpha, alpha);
+          }
+        `,
+        uniforms: {
+          uTime: { value: 0 },
+          uIndex: { value: i },
+        },
+        transparent: true,
+        blending: THREE.AdditiveBlending,
+        side: THREE.DoubleSide,
+        depthWrite: false,
+      });
+      const ray = new THREE.Mesh(rayGeo, mat);
+      ray.position.set(-36 + i * 14, 24, -28 - i * 3);
+      ray.rotation.z = -0.32 + i * 0.06;
+      ray.rotation.y = 0.15;
       this.godRays.push(ray);
+      this.godRayMats.push(mat);
       this.group.add(ray);
     }
 
-    // 6. Floating Sacred Vermilion Torii Archways & Stone Lanterns
+    // 7. Floating Sacred Vermilion Torii Archways & Stone Lanterns
     const woodPbr = ctx.assets.pbr('plank', 1, 3);
     const toriiMat = new THREE.MeshStandardMaterial({
-      color: 0xb82e16, // Sacred vermilion
+      color: 0xc43218, // Vibrant sacred vermilion
       map: woodPbr.map,
       normalMap: woodPbr.normalMap,
       roughnessMap: woodPbr.roughnessMap,
-      roughness: 0.5,
-      metalness: 0.1,
+      roughness: 0.45,
+      metalness: 0.12,
     });
     const blackLacquerMat = new THREE.MeshStandardMaterial({
-      color: 0x121216,
-      roughness: 0.35,
-      metalness: 0.25,
+      color: 0x141418,
+      roughness: 0.32,
+      metalness: 0.28,
+    });
+    const goldBrassMat = new THREE.MeshStandardMaterial({
+      color: 0xffd244,
+      metalness: 0.92,
+      roughness: 0.2,
+      emissive: 0x8a6410,
+      emissiveIntensity: 0.4,
     });
 
     for (const offset of [-20, 19]) {
@@ -181,37 +277,51 @@ export class CelestialScene implements RenderModule {
       archGroup.position.set(offset, 3.8, -12);
       archGroup.rotation.y = (Math.random() - 0.5) * 0.25;
 
-      const pillarGeo = new THREE.CylinderGeometry(0.32, 0.42, 8.0, 16);
-      const baseGeo = new THREE.CylinderGeometry(0.5, 0.55, 1.4, 16);
+      const pillarGeo = new THREE.CylinderGeometry(0.34, 0.44, 8.2, 16);
+      const baseGeo = new THREE.CylinderGeometry(0.52, 0.58, 1.5, 16);
 
-      for (const side of [-3.2, 3.2]) {
+      for (const side of [-3.4, 3.4]) {
         const p = new THREE.Mesh(pillarGeo, toriiMat);
         p.position.set(side, 0, 0);
         const b = new THREE.Mesh(baseGeo, blackLacquerMat);
-        b.position.set(side, -3.3, 0);
+        b.position.set(side, -3.35, 0);
         archGroup.add(p, b);
       }
 
-      const lintelGeo = new THREE.BoxGeometry(9.2, 0.65, 0.75);
+      // Upper curved kasagi beam
+      const lintelGeo = new THREE.BoxGeometry(9.6, 0.68, 0.78);
       const lintel = new THREE.Mesh(lintelGeo, toriiMat);
-      lintel.position.set(0, 4.0, 0);
+      lintel.position.set(0, 4.05, 0);
 
-      const capGeo = new THREE.BoxGeometry(9.6, 0.15, 0.85);
+      // Black lacquer roof cap with gold tips
+      const capGeo = new THREE.BoxGeometry(10.1, 0.16, 0.88);
       const cap = new THREE.Mesh(capGeo, blackLacquerMat);
-      cap.position.set(0, 4.38, 0);
+      cap.position.set(0, 4.45, 0);
 
-      const tieGeo = new THREE.BoxGeometry(7.4, 0.42, 0.45);
+      for (const endSide of [-5.0, 5.0]) {
+        const goldCap = new THREE.Mesh(new THREE.BoxGeometry(0.25, 0.22, 0.92), goldBrassMat);
+        goldCap.position.set(endSide, 4.45, 0);
+        archGroup.add(goldCap);
+      }
+
+      // Lower tie nuki beam
+      const tieGeo = new THREE.BoxGeometry(7.8, 0.45, 0.48);
       const tie = new THREE.Mesh(tieGeo, toriiMat);
-      tie.position.set(0, 2.7, 0);
+      tie.position.set(0, 2.75, 0);
 
-      archGroup.add(lintel, cap, tie);
+      // Central plaque strut (gakuzuka)
+      const strutGeo = new THREE.BoxGeometry(0.35, 1.25, 0.4);
+      const strut = new THREE.Mesh(strutGeo, toriiMat);
+      strut.position.set(0, 3.4, 0);
+
+      archGroup.add(lintel, cap, tie, strut);
       this.floatingStructures.push(archGroup);
       this.group.add(archGroup);
     }
 
-    // Floating Stone Lanterns
-    const lanternGeo = new THREE.BoxGeometry(0.7, 1.2, 0.7);
-    const fireGeo = new THREE.SphereGeometry(0.22, 12, 12);
+    // Floating Stone Lanterns (Tōrō) with warm flickering fire
+    const lanternGeo = new THREE.BoxGeometry(0.75, 1.25, 0.75);
+    const fireGeo = new THREE.SphereGeometry(0.24, 12, 12);
     const fireMat = new THREE.MeshBasicMaterial({ color: 0xffaa22 });
 
     for (let i = 0; i < 4; i++) {
@@ -220,13 +330,17 @@ export class CelestialScene implements RenderModule {
       const stone = new THREE.Mesh(lanternGeo, blackLacquerMat);
       const fire = new THREE.Mesh(fireGeo, fireMat);
       fire.position.y = 0.1;
-      lanternGroup.add(stone, fire);
+      const pointLight = new THREE.PointLight(0xff9922, 1.2, 7.5);
+      pointLight.position.y = 0.1;
+
+      lanternGroup.add(stone, fire, pointLight);
+      this.lanternLights.push(pointLight);
       this.floatingStructures.push(lanternGroup);
       this.group.add(lanternGroup);
     }
 
-    // 7. Golden Stardust & Divine Sakura Petal Motes
-    const moteCount = 150;
+    // 8. Golden Stardust & Divine Sakura Petal Motes
+    const moteCount = 180;
     this.motePositions = new Float32Array(moteCount * 3);
     for (let i = 0; i < moteCount; i++) {
       this.motePositions[i * 3 + 0] = (Math.random() - 0.5) * 55;
@@ -237,9 +351,9 @@ export class CelestialScene implements RenderModule {
     moteGeo.setAttribute('position', new THREE.BufferAttribute(this.motePositions, 3));
     const moteMat = new THREE.PointsMaterial({
       color: 0xffe899,
-      size: 0.18,
+      size: 0.22,
       transparent: true,
-      opacity: 0.85,
+      opacity: 0.88,
       blending: THREE.AdditiveBlending,
     });
     this.motes = new THREE.Points(moteGeo, moteMat);
@@ -251,14 +365,14 @@ export class CelestialScene implements RenderModule {
       this.active = true;
       this.group.visible = true;
       this.time = 0;
-      // Refined golden-twilight atmosphere
-      this.ctx.scene.fog = new THREE.FogExp2(0x84422e, 0.0038);
-      this.ctx.scene.background = new THREE.Color(0x381e30);
+      this.ctx.scene.fog = new THREE.FogExp2(0x5a2432, 0.0032);
+      this.ctx.scene.background = new THREE.Color(0x1a0c20);
     }
   }
 
   update(dt: number, game: Game): void {
-    if (!this.active && game.phase !== 'celestial') {
+    const isCelestial = game.phase === 'celestial';
+    if (!this.active && !isCelestial) {
       this.group.visible = false;
       return;
     }
@@ -266,7 +380,23 @@ export class CelestialScene implements RenderModule {
     this.group.visible = true;
     this.time += dt;
 
+    // Keep celestial atmosphere active
+    this.ctx.scene.fog = new THREE.FogExp2(0x5a2432, 0.0032);
+    this.ctx.scene.background = new THREE.Color(0x1a0c20);
+
     this.cloudMaterial.uniforms.uTime.value = this.time;
+
+    // Slowly rotate solar rays corona
+    this.sunRays.rotation.z += dt * 0.04;
+
+    for (const mat of this.godRayMats) {
+      mat.uniforms.uTime.value = this.time;
+    }
+
+    // Flicker lantern lights gently
+    for (let i = 0; i < this.lanternLights.length; i++) {
+      this.lanternLights[i].intensity = 1.1 + Math.sin(this.time * 7 + i * 2.3) * 0.25;
+    }
 
     for (let i = 0; i < this.floatingStructures.length; i++) {
       const s = this.floatingStructures[i];
@@ -276,7 +406,7 @@ export class CelestialScene implements RenderModule {
 
     for (let i = 0; i < this.godRays.length; i++) {
       const r = this.godRays[i];
-      r.rotation.z += Math.sin(this.time * 0.5 + i) * dt * 0.015;
+      r.rotation.z += Math.sin(this.time * 0.5 + i) * dt * 0.012;
     }
 
     const posAttr = this.motes.geometry.attributes.position as THREE.BufferAttribute;

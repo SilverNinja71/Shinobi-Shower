@@ -98,14 +98,16 @@ void main() {
   float forwardScatter = pow(clamp(VdotL * 0.5 + 0.5, 0.0, 1.0), 4.0);
 
   // 3. Deep ambient scattering vs twilight shadow
-  vec3 cloudLit = mix(uCloudBaseColor, uSunColor * 1.35, sunDiffuse);
-  vec3 finalColor = mix(uCloudShadowColor, cloudLit, smoothstep(-0.4, 0.5, NdotL));
-  finalColor += uSunColor * forwardScatter * 0.6;
+  vec3 cloudLit = mix(uCloudBaseColor, uSunColor * 1.45, sunDiffuse);
+  vec3 finalColor = mix(uCloudShadowColor, cloudLit, smoothstep(-0.35, 0.55, NdotL));
+  finalColor += uSunColor * forwardScatter * 0.75;
 
   // 4. Soft atmospheric rim
-  float rim = pow(1.0 - max(0.0, dot(N, V)), 2.2);
-  finalColor += uSunColor * rim * 0.45;
+  float rim = pow(1.0 - max(0.0, dot(N, V)), 2.6);
+  finalColor += uSunColor * rim * 0.55;
 
   gl_FragColor = vec4(finalColor, 1.0);
+  #include <tonemapping_fragment>
+  #include <colorspace_fragment>
 }
 
