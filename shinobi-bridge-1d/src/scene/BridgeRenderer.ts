@@ -36,7 +36,7 @@ export class BridgeRenderer implements RenderModule {
   }
 
   update(dt: number, game: Game): void {
-    const hidden = game.phase === 'celestial' || (game.phase === 'cutscene' && (game.cutscene.phase === 'explosion' || game.cutscene.phase === 'ascend'));
+    const hidden = game.phase === 'cutscene' && (game.cutscene.phase === 'explosion' || (game.cutscene.phase === 'ascend' && game.cutscene.progress < 0.55));
     this.group.visible = !hidden;
     if (hidden) return;
     this.deck.update(game.bridge);

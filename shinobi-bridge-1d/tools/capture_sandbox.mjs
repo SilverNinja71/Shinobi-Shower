@@ -9,14 +9,16 @@ const artifactDir = '/Users/lin/.gemini/antigravity/brain/5e0300c7-8cb2-455c-a54
 mkdirSync(artifactDir, { recursive: true });
 
 const chromePath = '/Applications/Google Chrome.app/Contents/MacOS/Google Chrome';
-const distDir = join(process.cwd(), 'dist');
+const distDir = '/Users/lin/Games/shinobi-bridge-1d/dist';
 
 const MIME = {
   '.html': 'text/html',
   '.js': 'application/javascript',
   '.css': 'text/css',
   '.jpg': 'image/jpeg',
+  '.png': 'image/png',
   '.glb': 'model/gltf-binary',
+  '.stl': 'application/octet-stream',
 };
 
 // Start static file server
@@ -61,18 +63,18 @@ async function takeScreenshot(url, outputPath, waitMs = 2000) {
 }
 
 try {
-  // 1. Menu with 101 Deaths: "⛩️ Enter Sandbox" button visible
+  // 1. Cutscene: Soldier's soul floating through the clouds & stopping on the white-and-gold staircase
   await takeScreenshot(
-    `http://127.0.0.1:${port}/?deaths=101`,
-    `${artifactDir}/sandbox_menu.png`,
-    2000,
+    `http://127.0.0.1:${port}/?autostart=1&seed=7&level=50&cutscene=1&cuttime=6.62&freeze=1`,
+    `${artifactDir}/celestial_soul_staircase.png`,
+    3500,
   );
 
-  // 2. In-game with Sandbox panel active
+  // 2. Celestial Clash: Photorealistic White & Gold Staircase + Bridge, MakerWorld Guardians, and Rigged Demons pushing the soldier down
   await takeScreenshot(
-    `http://127.0.0.1:${port}/?deaths=101&autostart=1&seed=7&sandbox=1&freeze=1`,
-    `${artifactDir}/sandbox_gameplay.png`,
-    2000,
+    `http://127.0.0.1:${port}/?autostart=1&seed=7&level=50&celestial=1&lightblade=1&freeze=1`,
+    `${artifactDir}/celestial_clash_realistic.png`,
+    3500,
   );
 } finally {
   server.close();

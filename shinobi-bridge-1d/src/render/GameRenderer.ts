@@ -213,9 +213,12 @@ export class GameRenderer {
         cam.lookAt(this.look);
       } else if (sim.phase === 'ascend') {
         const p = sim.progress;
-        const ascendY = wy + 3.0 + p * 30.0;
-        cam.position.set(wx + sx * 0.5, ascendY, 16.0);
-        this.look.set(wx, ascendY + 2.0, 0);
+        const easeOut = 1 - Math.pow(1 - p, 3);
+        const soulY = THREE.MathUtils.lerp(-11.5, 0.05, easeOut);
+        const soulX = THREE.MathUtils.lerp(wx, 0, easeOut);
+        const camZ = THREE.MathUtils.lerp(13.5, 18.0, easeOut);
+        cam.position.set(soulX + sx * 0.25, soulY + 1.85, camZ);
+        this.look.set(soulX, soulY + 1.15, 0);
         cam.lookAt(this.look);
       }
       cam.rotateZ((Math.sin(t * 23.0) * a) * 0.02);

@@ -1,19 +1,28 @@
 import * as THREE from 'three';
+import { clone as cloneSkeleton } from 'three/examples/jsm/utils/SkeletonUtils.js';
 import type { Game, GameEvent } from '../core/Game.ts';
 import type { RenderContext, RenderModule } from '../render/RenderContext.ts';
 import { worldX } from '../render/RenderContext.ts';
 
 interface DemonVisual {
   mesh: THREE.Group;
+  pivot: THREE.Group;
+  model: THREE.Object3D;
+  mixer: THREE.AnimationMixer;
+  sprintAction: THREE.AnimationAction;
+  strikeAction: THREE.AnimationAction;
   leftWing: THREE.Group;
   rightWing: THREE.Group;
   core: THREE.Mesh;
-  eyes: THREE.Mesh;
   alive: boolean;
 }
 
 interface AngelVisual {
   mesh: THREE.Group;
+  pivot: THREE.Group;
+  model: THREE.Object3D;
+  mixer: THREE.AnimationMixer;
+  idleAction: THREE.AnimationAction;
   upperWings: [THREE.Group, THREE.Group];
   midWings: [THREE.Group, THREE.Group];
   lowerWings: [THREE.Group, THREE.Group];
@@ -30,22 +39,43 @@ interface SparkBurst {
 }
 
 /**
- * Renders high-detail Abyssal Demons (sculpted horned fiends with fiery molten bat wings),
- * Ascending Seraphim (6-winged celestial angels with radiant golden quills and solar mandorlas),
- * death/blessing FX, and the warrior's radiant Light Blade.
+ * Renders photorealistic, rigged 3D Celestial Characters using the Quaternius skeletal mesh
+ * (`assets/chars/steve.glb`) and animation clips (`anims.glb` / `ninja_anims.glb`), dressed in
+ * normal-mapped PBR materials (`ranger_d/n/orm`, `head_m_d/n`, `arm_m_d/n`, `leather`, `slate`, `tile`):
+ * - Abyssal Oni / Archdemon Warriors: Rigged humanoid warriors in crimson-obsidian PBR battle armor,
+ *   horned war-helms, glowing eyes, molten demonic blades, and articulated wings — sprinting and
+ *   charging along the white-and-gold staircase to push the soldier down!
+ * - Ascending Seraphim Angels: Rigged celestial figures in white-and-gold silk PBR vestments,
+ *   six feathered golden wings, and radiant solar mandorlas.
  */
 export class CelestialEntitiesRenderer implements RenderModule {
   private readonly ctx: RenderContext;
   readonly group = new THREE.Group();
 
-  // Demon & Angel Visual Pools
   private readonly demonPool: DemonVisual[] = [];
   private readonly angelPool: AngelVisual[] = [];
   private readonly demonMap = new Map<number, DemonVisual>();
   private readonly angelMap = new Map<number, AngelVisual>();
 
-  // Particle bursts
   private readonly bursts: SparkBurst[] = [];
+
+  // Shared PBR Materials for Rigged Demons & Angels
+  private readonly demonClothMat: THREE.MeshStandardMaterial;
+  private readonly demonSkinMat: THREE.MeshStandardMaterial;
+  private readonly demonHeadMat: THREE.MeshStandardMaterial;
+  private readonly demonEyeMat: THREE.MeshBasicMaterial;
+  private readonly demonHornMat: THREE.MeshStandardMaterial;
+  private readonly demonArmorMat: THREE.MeshStandardMaterial;
+  private readonly demonBladeMat: THREE.MeshStandardMaterial;
+
+  private readonly angelClothMat: THREE.MeshStandardMaterial;
+  private readonly angelSkinMat: THREE.MeshStandardMaterial;
+  private readonly angelHeadMat: THREE.MeshStandardMaterial;
+  private readonly angelGoldMat: THREE.MeshStandardMaterial;
+
+  private readonly sprintClip: THREE.AnimationClip;
+  private readonly strikeClip: THREE.AnimationClip;
+  private readonly idleClip: THREE.AnimationClip;
 
   // Light Blade Visual
   private readonly lightBladeAura: THREE.Mesh;
@@ -60,16 +90,119 @@ export class CelestialEntitiesRenderer implements RenderModule {
     ctx.scene.add(this.group);
     this.group.visible = false;
 
-    // Build pools of 12 demons and 6 angels
+    const t = ctx.assets.tex;
+    const leatherPbr = ctx.assets.pbr('leather', 2, 2);
+    const slatePbr = ctx.assets.pbr('slate', 2, 2);
+    const tilePbr = ctx.assets.pbr('tile', 2, 2);
+
+    // 1. Realistic PBR Materials for Rigged Demons
+    this.demonClothMat = new THREE.MeshStandardMaterial({
+      color: 0x5c1414,
+      map: t.ranger_d,
+      normalMap: t.ranger_n,
+      roughnessMap: t.ranger_orm,
+      metalnessMap: t.ranger_orm,
+      roughness: 0.55,
+      metalness: 0.45,
+      emissive: 0x240404,
+      emissiveIntensity: 0.45,
+    });
+    this.demonSkinMat = new THREE.MeshStandardMaterial({
+      color: 0x6e221e,
+      map: t.arm_m_d,
+      normalMap: t.arm_m_n,
+      roughness: 0.6,
+      metalness: 0.15,
+      emissive: 0x280604,
+      emissiveIntensity: 0.35,
+    });
+    this.demonHeadMat = new THREE.MeshStandardMaterial({
+      color: 0x75201c,
+      map: t.head_m_d,
+      normalMap: t.head_m_n,
+      roughness: 0.52,
+      emissive: 0x2c0705,
+      emissiveIntensity: 0.4,
+    });
+    this.demonEyeMat = new THREE.MeshBasicMaterial({ color: 0xff3300 });
+    this.demonHornMat = new THREE.MeshStandardMaterial({
+      color: 0x1a0c0e,
+      normalMap: slatePbr.normalMap,
+      roughness: 0.28,
+      metalness: 0.65,
+      emissive: 0xcc2800,
+      emissiveIntensity: 0.75,
+    });
+    this.demonArmorMat = new THREE.MeshStandardMaterial({
+      color: 0x281216,
+      map: leatherPbr.map,
+      normalMap: leatherPbr.normalMap,
+      roughnessMap: leatherPbr.roughnessMap,
+      roughness: 0.38,
+      metalness: 0.72,
+      emissive: 0x380804,
+      emissiveIntensity: 0.4,
+    });
+    this.demonBladeMat = new THREE.MeshStandardMaterial({
+      color: 0xff3800,
+      metalness: 0.85,
+      roughness: 0.2,
+      emissive: 0xff2200,
+      emissiveIntensity: 1.4,
+    });
+
+    // 2. Realistic PBR Materials for Rigged Seraphim Angels
+    this.angelClothMat = new THREE.MeshStandardMaterial({
+      color: 0xfffdf8,
+      map: t.ranger_d,
+      normalMap: t.ranger_n,
+      roughness: 0.35,
+      metalness: 0.18,
+      emissive: 0x4a3818,
+      emissiveIntensity: 0.35,
+    });
+    this.angelSkinMat = new THREE.MeshStandardMaterial({
+      color: 0xfff0dc,
+      map: t.arm_m_d,
+      normalMap: t.arm_m_n,
+      roughness: 0.48,
+      emissive: 0x332410,
+      emissiveIntensity: 0.25,
+    });
+    this.angelHeadMat = new THREE.MeshStandardMaterial({
+      color: 0xfff2e2,
+      map: t.head_m_d,
+      normalMap: t.head_m_n,
+      roughness: 0.45,
+      emissive: 0x332410,
+      emissiveIntensity: 0.25,
+    });
+    this.angelGoldMat = new THREE.MeshStandardMaterial({
+      color: 0xffd455,
+      normalMap: tilePbr.normalMap,
+      metalness: 0.92,
+      roughness: 0.18,
+      emissive: 0x7a540c,
+      emissiveIntensity: 0.55,
+    });
+
+    // 3. Extract Skeletal Animation Clips (`sprint`, `Sword_Regular_A`, `idle`)
+    const allClips = [...ctx.assets.character.anims.animations, ...ctx.assets.character.ninjaAnims.animations];
+    const findClip = (name: string) => allClips.find((c) => c.name === name) ?? allClips[0];
+    this.sprintClip = this.pinClip(findClip('sprint'));
+    this.strikeClip = this.upperBodyClip(this.pinClip(findClip('Sword_Regular_A')));
+    this.idleClip = this.pinClip(findClip('idle'));
+
+    // Build pools of 12 rigged demons and 6 rigged angels
     for (let i = 0; i < 12; i++) {
-      const d = this.buildDemonMesh();
+      const d = this.buildRiggedDemonMesh();
       d.mesh.visible = false;
       this.demonPool.push(d);
       this.group.add(d.mesh);
     }
 
     for (let i = 0; i < 6; i++) {
-      const a = this.buildAngelMesh();
+      const a = this.buildRiggedAngelMesh();
       a.mesh.visible = false;
       this.angelPool.push(a);
       this.group.add(a.mesh);
@@ -99,356 +232,305 @@ export class CelestialEntitiesRenderer implements RenderModule {
     this.group.add(this.lightBladeBeam);
   }
 
-  private buildDemonMesh(): DemonVisual {
-    const root = new THREE.Group();
-    const slatePbr = this.ctx.assets.pbr('slate', 2, 2);
-
-    const carapaceMat = new THREE.MeshStandardMaterial({
-      color: 0x181020,
-      map: slatePbr.map,
-      normalMap: slatePbr.normalMap,
-      roughnessMap: slatePbr.roughnessMap,
-      roughness: 0.65,
-      metalness: 0.4,
-      emissive: 0x1f0612,
-      emissiveIntensity: 0.6,
-    });
-
-    // 1. Muscular Demonic Torso (Chest & Abdomen)
-    const torsoGroup = new THREE.Group();
-    const chestGeo = new THREE.BoxGeometry(0.95, 0.75, 0.58);
-    const chest = new THREE.Mesh(chestGeo, carapaceMat);
-    chest.position.set(0, 0.32, 0);
-    torsoGroup.add(chest);
-
-    for (let i = 0; i < 3; i++) {
-      const abGeo = new THREE.BoxGeometry(0.75 - i * 0.12, 0.24, 0.46 - i * 0.06);
-      const ab = new THREE.Mesh(abGeo, carapaceMat);
-      ab.position.set(0, -0.08 - i * 0.22, 0.04);
-      torsoGroup.add(ab);
-    }
-
-    // Glowing Molten Demonic Core (Chest)
-    const coreGeo = new THREE.SphereGeometry(0.24, 16, 16);
-    const coreMat = new THREE.MeshBasicMaterial({
-      color: 0xff4400,
-      blending: THREE.AdditiveBlending,
-    });
-    const core = new THREE.Mesh(coreGeo, coreMat);
-    core.position.set(0, 0.32, 0.3);
-    torsoGroup.add(core);
-
-    // 2. Demonic Horned Skull
-    const headGroup = new THREE.Group();
-    headGroup.position.set(0, 0.95, 0.08);
-
-    const craniumGeo = new THREE.DodecahedronGeometry(0.42, 1);
-    const cranium = new THREE.Mesh(craniumGeo, carapaceMat);
-    headGroup.add(cranium);
-
-    const jawGeo = new THREE.ConeGeometry(0.24, 0.36, 4);
-    const jaw = new THREE.Mesh(jawGeo, carapaceMat);
-    jaw.position.set(0, -0.32, 0.18);
-    jaw.rotation.x = -0.4;
-    headGroup.add(jaw);
-
-    const eyesGeo = new THREE.BoxGeometry(0.36, 0.08, 0.12);
-    const eyesMat = new THREE.MeshBasicMaterial({ color: 0xff1122 });
-    const eyes = new THREE.Mesh(eyesGeo, eyesMat);
-    eyes.position.set(0, 0.08, 0.36);
-    headGroup.add(eyes);
-
-    // Sweeping Ribbed Archdemon Horns
-    const hornMat = new THREE.MeshStandardMaterial({
-      color: 0x280612,
-      emissive: 0xff3800,
-      emissiveIntensity: 1.2,
-      roughness: 0.25,
-    });
-    for (const side of [-1, 1]) {
-      const hornCurve = new THREE.CatmullRomCurve3([
-        new THREE.Vector3(side * 0.2, 0.2, -0.05),
-        new THREE.Vector3(side * 0.65, 0.75, -0.15),
-        new THREE.Vector3(side * 0.85, 1.35, -0.38),
-        new THREE.Vector3(side * 0.58, 1.8, -0.55),
-      ]);
-      const hornGeo = new THREE.TubeGeometry(hornCurve, 16, 0.1, 8, false);
-      const horn = new THREE.Mesh(hornGeo, hornMat);
-      headGroup.add(horn);
-    }
-    torsoGroup.add(headGroup);
-
-    // Spiked Pauldrons & Muscular Arms
-    const pauldronGeo = new THREE.ConeGeometry(0.34, 0.7, 5);
-    for (const side of [-1, 1]) {
-      const p = new THREE.Mesh(pauldronGeo, carapaceMat);
-      p.position.set(side * 0.75, 0.55, 0);
-      p.rotation.z = -side * 0.75;
-      torsoGroup.add(p);
-
-      const armGeo = new THREE.CylinderGeometry(0.12, 0.09, 1.1, 6);
-      const arm = new THREE.Mesh(armGeo, carapaceMat);
-      arm.position.set(side * 0.8, 0.05, 0.15);
-      arm.rotation.z = -side * 0.4;
-      arm.rotation.x = 0.45;
-      torsoGroup.add(arm);
-
-      for (let c = 0; c < 3; c++) {
-        const clawGeo = new THREE.ConeGeometry(0.035, 0.35, 4);
-        const claw = new THREE.Mesh(clawGeo, carapaceMat);
-        claw.position.set(side * (0.9 + c * 0.09), -0.58, 0.48);
-        claw.rotation.x = 0.85;
-        torsoGroup.add(claw);
+  private pinClip(source: THREE.AnimationClip): THREE.AnimationClip {
+    const clip = source.clone();
+    clip.tracks = clip.tracks.filter((t) => t.name.endsWith('.quaternion') || t.name === 'pelvis.position');
+    for (const t of clip.tracks) {
+      if (t.name !== 'pelvis.position') continue;
+      const v = t.values;
+      let mx = 0;
+      let my = 0;
+      const n = v.length / 3;
+      for (let i = 0; i < v.length; i += 3) {
+        mx += v[i] / n;
+        my += v[i + 1] / n;
+      }
+      for (let i = 0; i < v.length; i += 3) {
+        v[i] = mx;
+        v[i + 1] = my;
       }
     }
-    root.add(torsoGroup);
+    return clip;
+  }
 
-    // 3. Glowing Fiery Balrog Bat Wings (Gothic Arched Silhouette)
-    const wingBoneMat = new THREE.MeshStandardMaterial({
-      color: 0x2a0808,
-      emissive: 0xff4400,
-      emissiveIntensity: 1.2,
-      roughness: 0.35,
-    });
-    const wingMembraneMat = new THREE.MeshStandardMaterial({
-      color: 0x4a0a14,
-      emissive: 0xcc2200,
-      emissiveIntensity: 0.9,
-      roughness: 0.5,
-      side: THREE.DoubleSide,
-      transparent: true,
-      opacity: 0.94,
-    });
+  private upperBodyClip(clip: THREE.AnimationClip): THREE.AnimationClip {
+    const upper = /^(spine_02|spine_03|neck_01|Head|clavicle|upperarm|lowerarm|hand)/;
+    const copy = clip.clone();
+    copy.tracks = copy.tracks.filter((t) => upper.test(t.name) && t.name.endsWith('.quaternion'));
+    return copy;
+  }
 
-    const createBatWing = (isLeft: boolean) => {
+  /**
+   * Clones the rigged Quaternius character (`steve.glb`) and equips it with realistic PBR Oni/Archdemon
+   * armor, curved horns, molten core, demonic greatsword, and articulated leather wings.
+   */
+  private buildRiggedDemonMesh(): DemonVisual {
+    const root = new THREE.Group();
+    const pivot = new THREE.Group();
+    root.add(pivot);
+
+    const model = cloneSkeleton(this.ctx.assets.character.body.scene);
+    model.traverse((o) => {
+      const m = o as THREE.SkinnedMesh;
+      if (!m.isSkinnedMesh) return;
+      const matName = (m.material as THREE.Material).name;
+      if (matName === 'cloth') m.material = this.demonClothMat;
+      else if (matName === 'skin') m.material = this.demonSkinMat;
+      else if (matName === 'head') m.material = this.demonHeadMat;
+      else if (matName === 'eye') m.material = this.demonEyeMat;
+      else if (matName === 'brow' || matName === 'hair') m.material = this.demonArmorMat;
+      m.castShadow = true;
+      m.receiveShadow = true;
+      m.frustumCulled = false;
+    });
+    pivot.add(model);
+
+    // Attach Horned Oni War-Helm & Glowing Eyes to Head bone
+    const headBone = model.getObjectByName('Head') as THREE.Bone | undefined;
+    if (headBone) {
+      // Sweeping Archdemon Horns
+      for (const side of [-1, 1]) {
+        const hornCurve = new THREE.CatmullRomCurve3([
+          new THREE.Vector3(side * 0.07, 0.08, 0.02),
+          new THREE.Vector3(side * 0.22, 0.22, 0.05),
+          new THREE.Vector3(side * 0.28, 0.42, -0.06),
+          new THREE.Vector3(side * 0.16, 0.56, -0.14),
+        ]);
+        const hornGeo = new THREE.TubeGeometry(hornCurve, 12, 0.036, 8, false);
+        const horn = new THREE.Mesh(hornGeo, this.demonHornMat);
+        headBone.add(horn);
+      }
+
+      // Oni Crest & Glowing Visor
+      const visor = new THREE.Mesh(new THREE.BoxGeometry(0.18, 0.038, 0.08), this.demonEyeMat);
+      visor.position.set(0, 0.04, 0.11);
+      headBone.add(visor);
+    }
+
+    // Attach Spiked Obsidian Pauldrons & Molten Heart Core to Spine_03
+    const chestBone = model.getObjectByName('spine_03') as THREE.Bone | undefined;
+    const core = new THREE.Mesh(
+      new THREE.SphereGeometry(0.11, 14, 14),
+      new THREE.MeshBasicMaterial({ color: 0xff4400 }),
+    );
+    core.position.set(0, 0.08, 0.15);
+    if (chestBone) {
+      chestBone.add(core);
+      const pauldronGeo = new THREE.ConeGeometry(0.16, 0.34, 6);
+      for (const side of [-1, 1]) {
+        const pauldron = new THREE.Mesh(pauldronGeo, this.demonArmorMat);
+        pauldron.position.set(side * 0.24, 0.14, 0);
+        pauldron.rotation.z = -side * 0.85;
+        chestBone.add(pauldron);
+      }
+    } else {
+      pivot.add(core);
+    }
+
+    // Attach Molten Demonic Odachi / Greatsword to Right Hand bone (`hand_r`)
+    const handR = model.getObjectByName('hand_r') as THREE.Bone | undefined;
+    if (handR) {
+      const swordGroup = new THREE.Group();
+      const blade = new THREE.Mesh(new THREE.BoxGeometry(0.032, 0.08, 0.98), this.demonBladeMat);
+      blade.position.set(0, 0, 0.52);
+      const guard = new THREE.Mesh(new THREE.BoxGeometry(0.18, 0.12, 0.04), this.demonArmorMat);
+      guard.position.set(0, 0, 0.05);
+      swordGroup.add(blade, guard);
+      swordGroup.position.set(-0.02, 0.08, 0);
+      handR.add(swordGroup);
+    }
+
+    // Attach Articulated Leather & Molten Bone Bat Wings to Upper Back
+    const createWing = (isLeft: boolean) => {
       const wingRoot = new THREE.Group();
-      wingRoot.position.set(isLeft ? -0.45 : 0.45, 0.55, -0.05);
       const s = isLeft ? -1 : 1;
+      wingRoot.position.set(s * 0.14, 1.35, -0.14);
 
-      // Humerus (Arched upward)
-      const humerusGeo = new THREE.CylinderGeometry(0.06, 0.09, 1.8, 6);
-      const humerus = new THREE.Mesh(humerusGeo, wingBoneMat);
-      humerus.position.set(s * 0.75, 0.65, 0);
-      humerus.rotation.z = s * 0.95;
+      const boneGeo = new THREE.CylinderGeometry(0.025, 0.04, 1.15, 6);
+      const humerus = new THREE.Mesh(boneGeo, this.demonHornMat);
+      humerus.position.set(s * 0.45, 0.38, -0.05);
+      humerus.rotation.z = s * 0.92;
       wingRoot.add(humerus);
 
-      // Radius (Curving down and out)
-      const radiusGeo = new THREE.CylinderGeometry(0.045, 0.065, 2.2, 6);
-      const radius = new THREE.Mesh(radiusGeo, wingBoneMat);
-      radius.position.set(s * 2.1, 0.95, 0);
-      radius.rotation.z = -s * 0.55;
-      wingRoot.add(radius);
-
-      // 4 Long Curved Finger Struts radiating downward
-      const fingerGeo = new THREE.CylinderGeometry(0.025, 0.04, 2.6, 5);
-      const angles = isLeft ? [-0.35, 0.1, 0.55, 0.95] : [0.35, -0.1, -0.55, -0.95];
-      for (let i = 0; i < 4; i++) {
-        const finger = new THREE.Mesh(fingerGeo, wingBoneMat);
-        finger.position.set(s * (2.8 - i * 0.3), 0.6 - i * 0.5, 0);
-        finger.rotation.z = angles[i];
-        wingRoot.add(finger);
-      }
-
-      // Spanned Webbed Bat Wing Membrane
       const memGeo = new THREE.BufferGeometry();
-      const memVerts = new Float32Array([
-        // Panel 1: Shoulder to finger 1
+      const verts = new Float32Array([
         0, 0, 0,
-        s * 2.2, 1.6, 0.05,
-        s * 3.6, 0.8, 0,
-        // Panel 2: Finger 1 to finger 2
+        s * 0.95, 0.78, -0.08,
+        s * 1.65, 0.32, -0.12,
         0, 0, 0,
-        s * 3.6, 0.8, 0,
-        s * 3.2, -0.6, -0.05,
-        // Panel 3: Finger 2 to finger 3
+        s * 1.65, 0.32, -0.12,
+        s * 1.25, -0.55, -0.08,
         0, 0, 0,
-        s * 3.2, -0.6, -0.05,
-        s * 2.2, -1.4, 0,
-        // Panel 4: Flank attachment
-        0, 0, 0,
-        s * 2.2, -1.4, 0,
-        s * 0.8, -1.0, 0.05,
+        s * 1.25, -0.55, -0.08,
+        s * 0.45, -0.48, -0.04,
       ]);
-      const memUvs = new Float32Array([
-        0, 0, 1, 1, 1, 0.5,
-        0, 0, 1, 0.5, 0.8, 0,
-        0, 0, 0.8, 0, 0.5, 0,
-        0, 0, 0.5, 0, 0.2, 0,
-      ]);
-      memGeo.setAttribute('position', new THREE.BufferAttribute(memVerts, 3));
-      memGeo.setAttribute('uv', new THREE.BufferAttribute(memUvs, 2));
+      memGeo.setAttribute('position', new THREE.BufferAttribute(verts, 3));
       memGeo.computeVertexNormals();
-
-      const membrane = new THREE.Mesh(memGeo, wingMembraneMat);
-      wingRoot.add(membrane);
-
+      const memMat = new THREE.MeshStandardMaterial({
+        color: 0x2a080c,
+        map: this.demonArmorMat.map,
+        normalMap: this.demonArmorMat.normalMap,
+        roughnessMap: this.demonArmorMat.roughnessMap,
+        emissive: 0x380802,
+        emissiveIntensity: 0.4,
+        roughness: 0.42,
+        metalness: 0.55,
+        side: THREE.DoubleSide,
+      });
+      wingRoot.add(new THREE.Mesh(memGeo, memMat));
       return wingRoot;
     };
 
-    const leftWing = createBatWing(true);
-    const rightWing = createBatWing(false);
-    root.add(leftWing, rightWing);
+    const leftWing = createWing(true);
+    const rightWing = createWing(false);
+    pivot.add(leftWing, rightWing);
 
-    return { mesh: root, leftWing, rightWing, core, eyes, alive: false };
+    // Skeletal Animation Mixer: blend full-body sprint with upper-body sword slashes
+    const mixer = new THREE.AnimationMixer(model);
+    const sprintAction = mixer.clipAction(this.sprintClip);
+    sprintAction.play();
+    sprintAction.setEffectiveWeight(1.0);
+
+    const strikeAction = mixer.clipAction(this.strikeClip);
+    strikeAction.play();
+    strikeAction.setEffectiveWeight(0.85);
+
+    return {
+      mesh: root,
+      pivot,
+      model,
+      mixer,
+      sprintAction,
+      strikeAction,
+      leftWing,
+      rightWing,
+      core,
+      alive: false,
+    };
   }
 
-  private buildAngelMesh(): AngelVisual {
+  /**
+   * Clones the rigged Quaternius character (`steve.glb`) for the Ascending Seraphim Angels,
+   * dressed in white-and-gold silk PBR vestments, golden crown & halo, and 6 feathered wings.
+   */
+  private buildRiggedAngelMesh(): AngelVisual {
     const root = new THREE.Group();
-    const burlapPbr = this.ctx.assets.pbr('burlap', 2, 3);
+    const pivot = new THREE.Group();
+    root.add(pivot);
 
-    // 1. Seraphic Sacred Vestments (Layered White & Gold)
-    const bodyGeo = new THREE.CylinderGeometry(0.35, 0.8, 2.5, 16);
-    const bodyMat = new THREE.MeshStandardMaterial({
-      color: 0xffffff,
-      map: burlapPbr.map,
-      normalMap: burlapPbr.normalMap,
-      roughnessMap: burlapPbr.roughnessMap,
-      roughness: 0.4,
-      metalness: 0.1,
-      emissive: 0xfff2dc,
-      emissiveIntensity: 0.6,
+    const model = cloneSkeleton(this.ctx.assets.character.body.scene);
+    model.traverse((o) => {
+      const m = o as THREE.SkinnedMesh;
+      if (!m.isSkinnedMesh) return;
+      const matName = (m.material as THREE.Material).name;
+      if (matName === 'cloth') m.material = this.angelClothMat;
+      else if (matName === 'skin') m.material = this.angelSkinMat;
+      else if (matName === 'head') m.material = this.angelHeadMat;
+      else m.material = this.angelGoldMat;
+      m.castShadow = true;
+      m.receiveShadow = true;
+      m.frustumCulled = false;
     });
-    const body = new THREE.Mesh(bodyGeo, bodyMat);
-    body.position.y = 0.2;
-    root.add(body);
+    pivot.add(model);
 
-    // Golden Obi & Stole Trim
-    const trimMat = new THREE.MeshStandardMaterial({
-      color: 0xf5c842,
-      metalness: 0.9,
-      roughness: 0.2,
-      emissive: 0xbb8f1c,
-      emissiveIntensity: 0.9,
-    });
-    const sashGeo = new THREE.TorusGeometry(0.45, 0.06, 8, 24);
-    const sash = new THREE.Mesh(sashGeo, trimMat);
+    // Flowing White & Gold Seraphic Robe Skirt around lower body
+    const skirt = new THREE.Mesh(new THREE.CylinderGeometry(0.22, 0.48, 0.95, 16), this.angelClothMat);
+    skirt.position.set(0, 0.48, 0);
+    const sash = new THREE.Mesh(new THREE.TorusGeometry(0.24, 0.035, 8, 24), this.angelGoldMat);
     sash.rotation.x = Math.PI / 2;
-    sash.position.y = 0.62;
-    root.add(sash);
+    sash.position.set(0, 0.96, 0);
+    pivot.add(skirt, sash);
 
-    // Cascading stole ribbons
-    const ribbonGeo = new THREE.BoxGeometry(0.16, 1.5, 0.03);
-    for (const side of [-0.2, 0.2]) {
-      const ribbon = new THREE.Mesh(ribbonGeo, trimMat);
-      ribbon.position.set(side, -0.15, 0.46);
-      ribbon.rotation.x = 0.14;
-      root.add(ribbon);
-    }
-
-    // Seraphic Head
-    const headGeo = new THREE.SphereGeometry(0.3, 20, 20);
-    const headMat = new THREE.MeshStandardMaterial({
-      color: 0xfffaee,
-      roughness: 0.38,
-      emissive: 0xfff6e8,
-      emissiveIntensity: 0.5,
-    });
-    const head = new THREE.Mesh(headGeo, headMat);
-    head.position.y = 1.55;
-    root.add(head);
-
-    // 2. Solar Mandorla / Radiant Golden Halo
+    // Solar Mandorla Halo behind head
     const haloGroup = new THREE.Group();
-    haloGroup.position.set(0, 2.05, 0);
-
-    const innerHaloGeo = new THREE.TorusGeometry(0.46, 0.05, 12, 32);
-    const innerHaloMat = new THREE.MeshBasicMaterial({ color: 0xffea55 });
-    const innerHalo = new THREE.Mesh(innerHaloGeo, innerHaloMat);
-    innerHalo.rotation.x = Math.PI * 0.35;
+    haloGroup.position.set(0, 1.72, -0.14);
+    const innerHaloMat = new THREE.MeshBasicMaterial({ color: 0xffea66 });
+    const innerHalo = new THREE.Mesh(new THREE.TorusGeometry(0.36, 0.032, 12, 32), innerHaloMat);
     haloGroup.add(innerHalo);
 
     const outerHaloGroup = new THREE.Group();
-    const raySpokeGeo = new THREE.BoxGeometry(0.045, 1.6, 0.03);
+    const raySpokeGeo = new THREE.BoxGeometry(0.03, 1.15, 0.02);
     for (let r = 0; r < 8; r++) {
       const spoke = new THREE.Mesh(raySpokeGeo, innerHaloMat);
       spoke.rotation.z = (r * Math.PI) / 8;
       outerHaloGroup.add(spoke);
     }
-    outerHaloGroup.rotation.x = Math.PI * 0.35;
     haloGroup.add(outerHaloGroup);
-    root.add(haloGroup);
+    pivot.add(haloGroup);
 
-    // 3. Six-Winged Seraphic Plumage (Radiant Golden Feathers)
+    // Six-Winged Seraphic Plumage
     const featherMat = new THREE.MeshStandardMaterial({
       color: 0xffffff,
       roughness: 0.25,
-      emissive: 0xfffaea,
-      emissiveIntensity: 0.75,
+      emissive: 0xfff6dd,
+      emissiveIntensity: 0.65,
       side: THREE.DoubleSide,
     });
-    const featherGoldMat = new THREE.MeshStandardMaterial({
-      color: 0xffd700,
-      metalness: 0.85,
-      roughness: 0.2,
-      emissive: 0xffaa00,
-      emissiveIntensity: 1.2,
-      side: THREE.DoubleSide,
-    });
-
     const createSeraphWing = (isLeft: boolean, lengthScale: number, angleOffset: number) => {
       const wingRoot = new THREE.Group();
       const s = isLeft ? -1 : 1;
-
-      const sparGeo = new THREE.CylinderGeometry(0.045, 0.07, 2.6 * lengthScale, 6);
-      const spar = new THREE.Mesh(sparGeo, trimMat);
-      spar.position.set(s * 1.1 * lengthScale, 0.6 * lengthScale, 0);
+      const spar = new THREE.Mesh(
+        new THREE.CylinderGeometry(0.03, 0.05, 1.8 * lengthScale, 6),
+        this.angelGoldMat,
+      );
+      spar.position.set(s * 0.75 * lengthScale, 0.42 * lengthScale, 0);
       spar.rotation.z = s * (0.85 + angleOffset);
       wingRoot.add(spar);
 
-      const featherGeo = new THREE.BoxGeometry(0.22 * lengthScale, 1.8 * lengthScale, 0.035);
-      for (let i = 0; i < 8; i++) {
-        const isGold = i === 0 || i === 7;
-        const feather = new THREE.Mesh(featherGeo, isGold ? featherGoldMat : featherMat);
-        const u = i / 7;
-        feather.position.set(
-          s * (0.55 + u * 2.4 * lengthScale),
-          (0.85 - u * 1.4) * lengthScale,
-          (i % 2) * 0.04
-        );
+      const featherGeo = new THREE.BoxGeometry(0.16 * lengthScale, 1.25 * lengthScale, 0.025);
+      for (let i = 0; i < 7; i++) {
+        const isGold = i === 0 || i === 6;
+        const feather = new THREE.Mesh(featherGeo, isGold ? this.angelGoldMat : featherMat);
+        const u = i / 6;
+        feather.position.set(s * (0.38 + u * 1.65 * lengthScale), (0.6 - u * 0.95) * lengthScale, (i % 2) * 0.03);
         feather.rotation.z = s * (0.7 + u * 1.1 + angleOffset * 0.5);
-        const sc = (1.2 - u * 0.3) * lengthScale;
-        feather.scale.set(sc, sc, 1);
         wingRoot.add(feather);
       }
       return wingRoot;
     };
 
-    // Upper Grand Wings (Soaring high above to frame the halo)
-    const upperL = createSeraphWing(true, 1.4, -0.85);
-    upperL.position.set(-0.25, 1.3, -0.1);
-    const upperR = createSeraphWing(false, 1.4, -0.85);
-    upperR.position.set(0.25, 1.3, -0.1);
+    const upperL = createSeraphWing(true, 1.2, -0.8);
+    upperL.position.set(-0.18, 1.45, -0.12);
+    const upperR = createSeraphWing(false, 1.2, -0.8);
+    upperR.position.set(0.18, 1.45, -0.12);
 
-    // Mid Mantle Wings (Spreading outward horizontally)
-    const midL = createSeraphWing(true, 1.25, 0.05);
-    midL.position.set(-0.35, 0.75, -0.05);
-    const midR = createSeraphWing(false, 1.25, 0.05);
-    midR.position.set(0.35, 0.75, -0.05);
+    const midL = createSeraphWing(true, 1.05, 0.05);
+    midL.position.set(-0.22, 1.15, -0.1);
+    const midR = createSeraphWing(false, 1.05, 0.05);
+    midR.position.set(0.22, 1.15, -0.1);
 
-    // Lower Swift Wings (Trailing downward around the robes)
-    const lowerL = createSeraphWing(true, 0.95, 0.95);
-    lowerL.position.set(-0.28, 0.35, 0.05);
-    const lowerR = createSeraphWing(false, 0.95, 0.95);
-    lowerR.position.set(0.28, 0.35, 0.05);
+    const lowerL = createSeraphWing(true, 0.85, 0.9);
+    lowerL.position.set(-0.18, 0.85, -0.08);
+    const lowerR = createSeraphWing(false, 0.85, 0.9);
+    lowerR.position.set(0.18, 0.85, -0.08);
 
-    root.add(upperL, upperR, midL, midR, lowerL, lowerR);
+    pivot.add(upperL, upperR, midL, midR, lowerL, lowerR);
 
-    // 4. Volumetric Ascending Holy Light Column
-    const beamGeo = new THREE.CylinderGeometry(0.4, 2.2, 18, 16, 1, true);
+    // Ascending Divine Light Beam
+    const beamGeo = new THREE.CylinderGeometry(0.35, 1.6, 14, 16, 1, true);
     const beamMat = new THREE.MeshBasicMaterial({
       color: 0xfff2bb,
       transparent: true,
-      opacity: 0.32,
+      opacity: 0.26,
       blending: THREE.AdditiveBlending,
       side: THREE.DoubleSide,
       depthWrite: false,
     });
     const lightBeam = new THREE.Mesh(beamGeo, beamMat);
-    lightBeam.position.y = -8.5;
+    lightBeam.position.y = -6.5;
     root.add(lightBeam);
+
+    const mixer = new THREE.AnimationMixer(model);
+    const idleAction = mixer.clipAction(this.idleClip);
+    idleAction.play();
+    idleAction.setEffectiveWeight(1.0);
 
     return {
       mesh: root,
+      pivot,
+      model,
+      mixer,
+      idleAction,
       upperWings: [upperL, upperR],
       midWings: [midL, midR],
       lowerWings: [lowerL, lowerR],
@@ -463,11 +545,11 @@ export class CelestialEntitiesRenderer implements RenderModule {
       this.active = true;
       this.group.visible = true;
     } else if (e.type === 'demon_slain') {
-      this.spawnParticleBurst(worldX(e.x), e.y, 0xff2200, 36);
+      this.spawnParticleBurst(worldX(e.x), e.y + 0.9, 0xff3300, 36);
     } else if (e.type === 'angel_bless') {
-      this.spawnParticleBurst(worldX(e.x), e.y, 0xfff0aa, 48);
+      this.spawnParticleBurst(worldX(e.x), e.y + 1.0, 0xfff0aa, 48);
     } else if (e.type === 'angel_struck') {
-      this.spawnParticleBurst(worldX(e.x), e.y, 0xff5533, 40);
+      this.spawnParticleBurst(worldX(e.x), e.y + 1.0, 0xff5533, 40);
     }
   }
 
@@ -483,7 +565,7 @@ export class CelestialEntitiesRenderer implements RenderModule {
       const speed = 4 + Math.random() * 8;
       const angle = Math.random() * Math.PI * 2;
       velocities.push(
-        new THREE.Vector3(Math.cos(angle) * speed, Math.sin(angle) * speed + 2, (Math.random() - 0.5) * 4)
+        new THREE.Vector3(Math.cos(angle) * speed, Math.sin(angle) * speed + 2, (Math.random() - 0.5) * 4),
       );
     }
 
@@ -501,7 +583,8 @@ export class CelestialEntitiesRenderer implements RenderModule {
   }
 
   update(dt: number, game: Game): void {
-    if (!this.active && game.phase !== 'celestial') {
+    const inAscendLanding = game.phase === 'cutscene' && game.cutscene.phase === 'ascend' && game.cutscene.progress > 0.65;
+    if (!this.active && game.phase !== 'celestial' && !inAscendLanding) {
       this.group.visible = false;
       return;
     }
@@ -512,6 +595,7 @@ export class CelestialEntitiesRenderer implements RenderModule {
     const celestial = game.celestial;
     const demons = celestial.demons;
     const angels = celestial.angels;
+    const wx = worldX(game.warrior.x);
 
     const activeDemonIds = new Set<number>();
     for (const d of demons) {
@@ -526,21 +610,34 @@ export class CelestialEntitiesRenderer implements RenderModule {
       }
       if (v) {
         v.mesh.visible = true;
-        v.mesh.position.set(worldX(d.x), d.y, 0);
+        const dxWorld = worldX(d.x);
+        // When charging along the white-and-gold staircase, follow the step slope slightly outside the central dais
+        const distFromCenter = Math.max(0, Math.abs(dxWorld) - 4.2);
+        const stairOffsetY = d.staircaseCharger ? -distFromCenter * 0.14 : 0;
+        v.mesh.position.set(dxWorld, d.y + stairOffsetY, d.z * 0.35);
 
-        // Flapping animation
-        const flap = Math.sin(this.time * 8.5 + d.id * 1.7) * 0.48;
+        // Scale up Archdemon Drakes vs Oni Imps
+        const scale = d.kind === 'drake' ? 1.32 : 1.05;
+        v.mesh.scale.setScalar(scale);
+
+        // Turn the rigged demon toward the warrior (three-quarter profile like WarriorRig)
+        const dirToWarrior = wx >= dxWorld ? 1 : -1;
+        v.pivot.rotation.y = dirToWarrior * (Math.PI / 2 - 0.38);
+        v.pivot.scale.x = dirToWarrior;
+
+        // Advance skeletal animation mixer (sprint + aggressive sword swing when close to pushing warrior)
+        const distToWarrior = Math.abs(wx - dxWorld);
+        v.strikeAction.setEffectiveWeight(distToWarrior < 4.5 ? 1.0 : 0.35);
+        v.mixer.update(dt * (d.kind === 'drake' ? 1.15 : 1.4));
+
+        // Flap demonic wings
+        const flap = Math.sin(this.time * 8.5 + d.id * 1.7) * 0.45;
         v.leftWing.rotation.z = flap;
         v.rightWing.rotation.z = -flap;
-        v.leftWing.rotation.y = Math.cos(this.time * 8.5 + d.id * 1.7) * 0.25;
-        v.rightWing.rotation.y = -Math.cos(this.time * 8.5 + d.id * 1.7) * 0.25;
 
-        // Pulse molten core
-        const coreScale = 1.0 + Math.sin(this.time * 5.0 + d.id * 2.1) * 0.22;
+        // Pulse molten chest core
+        const coreScale = 1.0 + Math.sin(this.time * 5.5 + d.id * 2.1) * 0.2;
         v.core.scale.setScalar(coreScale);
-
-        // Dive angle tilt
-        v.mesh.rotation.z = d.vx * -0.06;
       }
     }
 
@@ -565,7 +662,9 @@ export class CelestialEntitiesRenderer implements RenderModule {
       }
       if (v) {
         v.mesh.visible = true;
-        v.mesh.position.set(worldX(a.x), a.y, 0);
+        v.mesh.position.set(worldX(a.x), a.y, -0.4);
+        v.pivot.rotation.y = Math.sin(this.time * 1.2 + a.id) * 0.25;
+        v.mixer.update(dt);
 
         const flapUpper = Math.sin(this.time * 4.5 + a.id * 1.4) * 0.22;
         const flapMid = Math.sin(this.time * 4.5 + a.id * 1.4 + 0.5) * 0.28;
@@ -595,7 +694,6 @@ export class CelestialEntitiesRenderer implements RenderModule {
     this.lightBladeAura.visible = hasLightBlade;
     this.lightBladeBeam.visible = hasLightBlade;
     if (hasLightBlade) {
-      const wx = worldX(game.warrior.x);
       const wy = 0.8;
       this.lightBladeAura.position.set(wx + game.warrior.facing * 0.6, wy, 0.2);
       this.lightBladeAura.rotation.z = (Math.PI / 2) * -game.warrior.facing;

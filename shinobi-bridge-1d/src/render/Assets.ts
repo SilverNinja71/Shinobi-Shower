@@ -5,7 +5,7 @@ import wetSource from '../shaders/WetSurfacePBR.frag';
 import type { SharedUniforms } from './RenderContext.ts';
 
 /** CC0 PBR sets in assets/tex (see CREDITS.md). */
-export type PBRName = 'plank' | 'slate' | 'rope' | 'snow' | 'burlap' | 'leather';
+export type PBRName = 'plank' | 'slate' | 'rope' | 'snow' | 'burlap' | 'leather' | 'tile' | 'wall' | 'rock';
 
 const PBR_FILES: Record<PBRName, string[]> = {
   plank: ['d', 'n', 'r', 'ao'],
@@ -14,6 +14,9 @@ const PBR_FILES: Record<PBRName, string[]> = {
   snow: ['d', 'n', 'r'],
   burlap: ['d', 'n', 'r'],
   leather: ['d', 'n', 'r'],
+  tile: ['d', 'n', 'r'],
+  wall: ['d', 'n', 'r'],
+  rock: ['d', 'n', 'r'],
 };
 
 /** The character's own textures, from the Quaternius packs. */
@@ -33,15 +36,23 @@ export interface CharacterGLTF {
   ninjaAnims: GLTF;
 }
 
+export interface WorldModels {
+  nature: GLTF;
+  wukong: GLTF;
+  nezhaGeo: THREE.BufferGeometry;
+}
+
 export class Assets {
   /** Every texture by file stem, e.g. `plank_d`, `slate_n`, `head_m_d`. */
   readonly tex: Record<string, THREE.Texture>;
   readonly character: CharacterGLTF;
+  readonly world: WorldModels;
   readonly maxAnisotropy: number;
 
-  private constructor(tex: Record<string, THREE.Texture>, character: CharacterGLTF, maxAnisotropy: number) {
+  private constructor(tex: Record<string, THREE.Texture>, character: CharacterGLTF, world: WorldModels, maxAnisotropy: number) {
     this.tex = tex;
     this.character = character;
+    this.world = world;
     this.maxAnisotropy = maxAnisotropy;
   }
 
@@ -51,6 +62,8 @@ export class Assets {
     manager.onProgress = (_url, loaded, total) => onProgress(total ? loaded / total : 0);
     const texLoader = new THREE.TextureLoader(manager);
     const gltfLoader = new GLTFLoader(manager);
+    const fileLoader = new THREE.FileLoader(manager);
+    fileLoader.setResponseType('arraybuffer');
     const aniso = Math.min(8, renderer.capabilities.getMaxAnisotropy());
 
     const stems: string[] = [];
@@ -67,13 +80,17 @@ export class Assets {
       if (url.includes('/chars/')) t.flipY = false;
       return [stem, t] as const;
     });
-    const [texPairs, body, anims, ninjaAnims] = await Promise.all([
+    const [texPairs, body, anims, ninjaAnims, nature, wukong, nezhaBuf] = await Promise.all([
       Promise.all(texJobs),
       gltfLoader.loadAsync('assets/chars/steve.glb'),
       gltfLoader.loadAsync('assets/chars/anims.glb'),
       gltfLoader.loadAsync('assets/chars/ninja_anims.glb'),
+      gltfLoader.loadAsync('assets/world/nature.glb'),
+      gltfLoader.loadAsync('assets/world/wukong.glb'),
+      fileLoader.loadAsync('assets/world/nezha.stl') as Promise<ArrayBuffer>,
     ]);
-    return new Assets(Object.fromEntries(texPairs), { body, anims, ninjaAnims }, aniso);
+    const nezhaGeo = parseBinarySTL(nezhaBuf);
+    return new Assets(Object.fromEntries(texPairs), { body, anims, ninjaAnims }, { nature, wukong, nezhaGeo }, aniso);
   }
 
   /**
@@ -91,6 +108,40 @@ export class Assets {
     };
     return { map: get('d')!, normalMap: get('n')!, roughnessMap: get('r')!, aoMap: get('ao') };
   }
+}
+
+function parseBinarySTL(buffer: ArrayBuffer): THREE.BufferGeometry {
+  const view = new DataView(buffer);
+  const faces = view.getUint32(80, true);
+  const positions = new Float32Array(faces * 9);
+  const normals = new Float32Array(faces * 9);
+  let offset = 84;
+  for (let i = 0; i < faces; i++) {
+    const nx = view.getFloat32(offset, true);
+    const ny = view.getFloat32(offset + 4, true);
+    const nz = view.getFloat32(offset + 8, true);
+    offset += 12;
+    for (let v = 0; v < 3; v++) {
+      const idx = i * 9 + v * 3;
+      const vx = view.getFloat32(offset, true);
+      const vy = view.getFloat32(offset + 4, true);
+      const vz = view.getFloat32(offset + 8, true);
+      // MakerWorld STL is Z-up; convert to Three.js Y-up
+      positions[idx] = vx;
+      positions[idx + 1] = vz;
+      positions[idx + 2] = -vy;
+      normals[idx] = nx;
+      normals[idx + 1] = nz;
+      normals[idx + 2] = -ny;
+      offset += 12;
+    }
+    offset += 2;
+  }
+  const geo = new THREE.BufferGeometry();
+  geo.setAttribute('position', new THREE.BufferAttribute(positions, 3));
+  geo.setAttribute('normal', new THREE.BufferAttribute(normals, 3));
+  geo.center();
+  return geo;
 }
 
 /* ---------------- Wet-surface PBR ---------------- */

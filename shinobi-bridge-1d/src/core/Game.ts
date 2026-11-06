@@ -392,12 +392,21 @@ export class Game {
       else if (e.type === 'atomic_fission') this.events.push({ type: 'atomic_fission', x: e.x, y: e.y });
       else if (e.type === 'atomic_explosion') this.events.push({ type: 'atomic_explosion', x: e.x, y: e.y });
       else if (e.type === 'bridge_shatter') this.events.push({ type: 'bridge_collapse' });
+      else if (e.type === 'celestial_ascend') {
+        this.warrior.x = 18;
+        this.celestial.start(18);
+        // Spawn initial demons advancing from both sides of the white-and-gold staircase to push the soldier down
+        const dLeft = this.celestial.spawnDemon('imp', 12.5, 0);
+        dLeft.staircaseCharger = true;
+        const dRight = this.celestial.spawnDemon('drake', 23.5, 0);
+        dRight.staircaseCharger = true;
+      }
     }
     this.cutscene.events.length = 0;
 
     if (done) {
       this.phase = 'celestial';
-      this.celestial.start(this.warrior.x);
+      if (!this.celestial.active) this.celestial.start(this.warrior.x);
       this.events.push({ type: 'celestial_start' });
     }
   }

@@ -315,6 +315,14 @@ async function boot(): Promise<void> {
           for (const ev of game.cutscene.events) {
             if (ev.type === 'atomic_fission') game.events.push({ type: 'atomic_fission', x: ev.x, y: ev.y });
             if (ev.type === 'bridge_shatter') game.events.push({ type: 'bridge_collapse' });
+            if (ev.type === 'celestial_ascend') {
+              game.warrior.x = 18;
+              game.celestial.start(18);
+              const dL = game.celestial.spawnDemon('imp', 13.5, 0);
+              dL.staircaseCharger = true;
+              const dR = game.celestial.spawnDemon('drake', 22.5, 0);
+              dR.staircaseCharger = true;
+            }
           }
           game.cutscene.events.length = 0;
         }
@@ -325,11 +333,15 @@ async function boot(): Promise<void> {
       game.cutscene.time = 7.0;
       game.cutscene.update(0.1);
       game.phase = 'celestial';
-      game.celestial.start(game.warrior.x);
+      game.warrior.x = 18;
+      game.celestial.start(18);
       game.events.push({ type: 'celestial_start' });
-      game.celestial.spawnDemon('imp', game.warrior.x + 4.2, 3.8);
-      game.celestial.spawnDemon('drake', game.warrior.x - 4.8, 5.0);
-      const ang = game.celestial.spawnAngel(game.warrior.x + 2.0);
+      const d1 = game.celestial.spawnDemon('imp', 14.2, 0);
+      d1.staircaseCharger = true;
+      const d2 = game.celestial.spawnDemon('drake', 22.0, 0);
+      d2.staircaseCharger = true;
+      game.celestial.spawnDemon('imp', 20.8, 3.2);
+      const ang = game.celestial.spawnAngel(16.0);
       ang.y = 1.6;
       if (params.get('lightblade') === '1') {
         game.celestial.lightBladeTimer = 10;

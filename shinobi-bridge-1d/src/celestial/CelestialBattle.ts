@@ -21,6 +21,8 @@ export interface Demon {
   wingSpeed: number;
   t: number;
   swoopCooldown: number;
+  /** True when the demon charges along the white-and-gold staircase to push the soldier down. */
+  staircaseCharger?: boolean;
 }
 
 export interface Angel {
@@ -127,15 +129,17 @@ export class CelestialBattle {
   spawnDemon(kind: DemonKind, x?: number, y?: number): Demon {
     const id = this.nextEntityId++;
     const isDrake = kind === 'drake';
-    const posX = x ?? (Math.random() > 0.5 ? 1 : -1) * (14 + Math.random() * 8);
-    const posY = y ?? (6 + Math.random() * 5);
+    // Half of auto-spawned demons emerge on the white-and-gold staircase to charge & push the soldier down!
+    const isStairCharger = y === undefined && (id % 2 === 1);
+    const posX = x ?? 18 + (Math.random() > 0.5 ? 1 : -1) * (8 + Math.random() * 6);
+    const posY = y ?? (isStairCharger ? CLOUD_DECK_Y : 3.2 + Math.random() * 3.0);
     const demon: Demon = {
       id,
       x: posX,
       y: posY,
-      z: (Math.random() - 0.5) * 1.5,
+      z: (Math.random() - 0.5) * 0.8,
       vx: (Math.random() - 0.5) * 2,
-      vy: -0.5,
+      vy: isStairCharger ? 0 : -0.5,
       vz: 0,
       kind,
       health: isDrake ? 3 : 1,
@@ -145,7 +149,8 @@ export class CelestialBattle {
       wingAngle: 0,
       wingSpeed: isDrake ? 6 : 10,
       t: 0,
-      swoopCooldown: 1.0 + Math.random() * 2,
+      swoopCooldown: isStairCharger ? 0 : 1.0 + Math.random() * 2,
+      staircaseCharger: isStairCharger,
     };
     this.demons.push(demon);
     this.events.push({ type: 'demon_spawn', id, x: demon.x, y: demon.y, kind });
@@ -154,7 +159,7 @@ export class CelestialBattle {
 
   spawnAngel(x?: number): Angel {
     const id = this.nextEntityId++;
-    const posX = x ?? (Math.random() - 0.5) * 20;
+    const posX = x ?? 18 + (Math.random() - 0.5) * 16;
     const angel: Angel = {
       id,
       x: posX,
@@ -231,12 +236,19 @@ export class CelestialBattle {
       d.wingAngle += dt * d.wingSpeed;
       d.swoopCooldown -= dt;
 
-      // Demon AI: Swoop dive towards warrior
+      // Demon AI: Staircase chargers sprint up/along the white-and-gold staircase to push the soldier down;
+      // aerial demons hover and swoop toward the soldier!
       const dx = warrior.x - d.x;
-      const dy = CLOUD_DECK_Y + 1.0 - d.y;
+      const dy = CLOUD_DECK_Y + 0.8 - d.y;
       const dist = Math.hypot(dx, dy);
 
-      if (d.swoopCooldown <= 0) {
+      if (d.staircaseCharger) {
+        const speed = d.kind === 'drake' ? 5.8 : 7.2;
+        const targetVx = Math.sign(dx || 1) * speed;
+        d.vx += (targetVx - d.vx) * Math.min(1, dt * 8);
+        d.y = CLOUD_DECK_Y;
+        d.vy = 0;
+      } else if (d.swoopCooldown <= 0) {
         // Dive phase
         const speed = d.kind === 'drake' ? 9.5 : 12.0;
         d.vx = (dx / (dist + 0.01)) * speed;
@@ -247,7 +259,7 @@ export class CelestialBattle {
         }
       } else {
         // Hover/patrol phase
-        const hoverTargetY = 5.0 + Math.sin(d.t * 2) * 1.5;
+        const hoverTargetY = 4.2 + Math.sin(d.t * 2) * 1.2;
         d.vy += (hoverTargetY - d.y) * 2.0 * dt;
         d.vx += (Math.sign(dx) * 2.5 - d.vx) * 1.5 * dt;
       }
@@ -255,28 +267,31 @@ export class CelestialBattle {
       d.x += d.vx * dt;
       d.y += d.vy * dt;
 
-      // Clamp arena
+      // Clamp arena (keep compatible with both [-ARENA_HALF_WIDTH] tests and [0..36] lane play)
       if (d.x < -ARENA_HALF_WIDTH) {
         d.x = -ARENA_HALF_WIDTH;
         d.vx = Math.abs(d.vx);
-      } else if (d.x > ARENA_HALF_WIDTH) {
-        d.x = ARENA_HALF_WIDTH;
+      } else if (d.x > 36 + ARENA_HALF_WIDTH) {
+        d.x = 36 + ARENA_HALF_WIDTH;
         d.vx = -Math.abs(d.vx);
       }
       if (d.y < CLOUD_DECK_Y) {
         d.y = CLOUD_DECK_Y;
-        d.vy = Math.abs(d.vy) * 0.8;
+        d.vy = d.staircaseCharger ? 0 : Math.abs(d.vy) * 0.8;
       }
 
-      // Check collision with warrior (damage warrior)
-      if (dist < d.radius + 0.6 && !warrior.invulnerable) {
+      // Check collision with warrior (damage warrior & push the soldier down the staircase!)
+      if (dist < d.radius + 0.65 && !warrior.invulnerable) {
         const damage = d.kind === 'drake' ? 18 : 12;
         onDrynessChange?.(-damage);
         this.events.push({ type: 'demon_hit_warrior', id: d.id, x: d.x, y: d.y, points: damage });
-        // Knock demon back
-        d.vx = -Math.sign(dx) * 8;
-        d.vy = 6;
-        d.swoopCooldown = 2.5;
+        // Push the warrior down the staircase!
+        const pushDir = Math.sign(dx) || 1;
+        warrior.vx = pushDir * 8.5;
+        // Knock demon back briefly before charging again
+        d.vx = -pushDir * 7.5;
+        d.vy = d.staircaseCharger ? 0 : 5.5;
+        d.swoopCooldown = 1.8;
       }
     }
 

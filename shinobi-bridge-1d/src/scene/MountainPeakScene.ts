@@ -41,6 +41,7 @@ const SHADOW_DISTANCE = 60;
 export class MountainPeakScene implements RenderModule {
   readonly moonLight: THREE.DirectionalLight;
   private readonly ctx: RenderContext;
+  private readonly envGroup = new THREE.Group();
   private readonly env: EnvUniforms;
   private readonly hemi: THREE.HemisphereLight;
   private readonly flashLight: THREE.DirectionalLight;
@@ -77,6 +78,19 @@ export class MountainPeakScene implements RenderModule {
     new DistantPeaks(ctx, this.env, noise);
     new AnchorCliffs(ctx, this.env);
     new GorgeFog(ctx, this.env, noise);
+
+    // Group all MountainPeakScene environment meshes so they can be cleanly hidden during Celestial Clash
+    this.envGroup.name = 'mountain_peak_env';
+    const toMove: THREE.Object3D[] = [];
+    for (const child of scene.children) {
+      if (child !== this.envGroup && child.name !== 'celestial_scene') {
+        toMove.push(child);
+      }
+    }
+    for (const child of toMove) {
+      this.envGroup.add(child);
+    }
+    scene.add(this.envGroup);
 
     // Cool skylight from above; from below, only the faint moonlit fog of the gorge.
     this.hemi = new THREE.HemisphereLight(new THREE.Color(0.42, 0.5, 0.7), new THREE.Color(0.045, 0.052, 0.07), HEMI_INTENSITY);
@@ -160,15 +174,12 @@ export class MountainPeakScene implements RenderModule {
     this.moonLight.visible = visible;
     this.hemi.visible = visible;
     this.flashLight.visible = visible;
-    this.ctx.scene.traverse((obj) => {
-      if (obj.name && obj.name.startsWith('env-') && !obj.name.startsWith('celestial')) {
-        obj.visible = visible;
-      }
-    });
+    this.envGroup.visible = visible;
   }
 
   update(dt: number, game: Game): void {
-    const isCelestial = game.phase === 'celestial';
+    const inAscendCutscene = game.phase === 'cutscene' && game.cutscene.phase === 'ascend';
+    const isCelestial = game.phase === 'celestial' || inAscendCutscene;
     this.setEnvironmentVisible(!isCelestial);
     if (isCelestial) return;
     const u = this.ctx.uniforms;

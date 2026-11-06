@@ -1,4 +1,5 @@
 import * as THREE from 'three';
+import { clone as cloneSkeleton } from 'three/examples/jsm/utils/SkeletonUtils.js';
 import type { Game, GameEvent } from '../core/Game.ts';
 import type { RenderContext, RenderModule } from '../render/RenderContext.ts';
 import { worldX } from '../render/RenderContext.ts';
@@ -132,6 +133,13 @@ export class AtomicCutsceneRenderer implements RenderModule {
 
   // Skyward launch speedlines
   private readonly speedlines: THREE.LineSegments;
+
+  // Ethereal Soldier's Soul Ascension & Cloud Passage Visuals
+  private readonly soulGroup = new THREE.Group();
+  private readonly soulAura: THREE.Mesh;
+  private readonly soulHalo: THREE.Mesh;
+  private readonly soulCloudDeck = new THREE.Group();
+  private readonly soulMixer: THREE.AnimationMixer;
 
   private active = false;
   private time = 0;
@@ -421,6 +429,91 @@ export class AtomicCutsceneRenderer implements RenderModule {
     this.speedlines = new THREE.LineSegments(linesGeo, linesMat);
     this.group.add(this.speedlines);
     this.speedlines.visible = false;
+
+    // --- 7. Ethereal Soldier's Soul Floating Through Clouds & Stopping on the White-and-Gold Staircase ---
+    const soulModel = cloneSkeleton(ctx.assets.character.body.scene);
+    const soulMat = new THREE.MeshStandardMaterial({
+      color: 0x88f5ff,
+      emissive: 0x44ccff,
+      emissiveIntensity: 1.8,
+      transparent: true,
+      opacity: 0.78,
+      roughness: 0.15,
+      metalness: 0.2,
+      blending: THREE.AdditiveBlending,
+      depthWrite: false,
+    });
+    soulModel.traverse((o) => {
+      const m = o as THREE.SkinnedMesh;
+      if (m.isSkinnedMesh) {
+        m.material = soulMat;
+        m.frustumCulled = false;
+      }
+    });
+    this.soulMixer = new THREE.AnimationMixer(soulModel);
+    const idleClip = ctx.assets.character.anims.animations.find((c) => c.name === 'idle') ?? ctx.assets.character.anims.animations[0];
+    if (idleClip) {
+      const act = this.soulMixer.clipAction(idleClip);
+      act.play();
+    }
+    this.soulGroup.add(soulModel);
+
+    // Radiant Spirit Core & Ascending Golden-Cyan Aura Pillar
+    const auraGeo = new THREE.CylinderGeometry(0.45, 0.95, 3.2, 20, 1, true);
+    const auraMat = new THREE.MeshBasicMaterial({
+      color: 0x99f6ff,
+      transparent: true,
+      opacity: 0.36,
+      blending: THREE.AdditiveBlending,
+      side: THREE.DoubleSide,
+      depthWrite: false,
+    });
+    this.soulAura = new THREE.Mesh(auraGeo, auraMat);
+    this.soulAura.position.y = 1.1;
+    this.soulGroup.add(this.soulAura);
+
+    const haloGeo = new THREE.RingGeometry(0.55, 0.92, 32);
+    const haloMat = new THREE.MeshBasicMaterial({
+      color: 0xffdf77,
+      transparent: true,
+      opacity: 0.8,
+      blending: THREE.AdditiveBlending,
+      side: THREE.DoubleSide,
+      depthWrite: false,
+    });
+    this.soulHalo = new THREE.Mesh(haloGeo, haloMat);
+    this.soulHalo.position.set(0, 1.85, -0.15);
+    this.soulGroup.add(this.soulHalo);
+
+    this.soulGroup.visible = false;
+    this.group.add(this.soulGroup);
+
+    // Volumetric Cloud Banks the Soldier's Soul Floats Through During Ascension
+    const snowPbr = ctx.assets.pbr('snow', 2, 2);
+    const cloudPuffMat = new THREE.MeshStandardMaterial({
+      color: 0xf7efe2,
+      map: snowPbr.map,
+      normalMap: snowPbr.normalMap,
+      roughness: 0.85,
+      emissive: 0x553820,
+      emissiveIntensity: 0.35,
+      transparent: true,
+      opacity: 0.82,
+      depthWrite: false,
+    });
+    const puffGeo = new THREE.DodecahedronGeometry(2.4, 2);
+    const cloudCoords = [
+      [-3.2, -9.5, 1.5], [3.4, -8.8, 1.2], [-1.8, -6.5, -1.8],
+      [2.6, -5.2, 1.6], [-3.8, -3.5, 0.8], [3.2, -2.4, -1.2],
+    ];
+    for (const [cx, cy, cz] of cloudCoords) {
+      const puff = new THREE.Mesh(puffGeo, cloudPuffMat);
+      puff.position.set(cx, cy, cz);
+      puff.scale.set(1.6, 0.58, 1.1);
+      this.soulCloudDeck.add(puff);
+    }
+    this.soulCloudDeck.visible = false;
+    this.group.add(this.soulCloudDeck);
   }
 
   handleEvent(e: GameEvent, _game: Game): void {
@@ -435,6 +528,8 @@ export class AtomicCutsceneRenderer implements RenderModule {
       this.atomGroup.visible = true;
       this.explosionGroup.visible = false;
       this.speedlines.visible = false;
+      this.soulGroup.visible = false;
+      this.soulCloudDeck.visible = false;
       this.flashIntensity = 0;
       this.flashMaterial.opacity = 0;
       this.cleavageMaterial.opacity = 0;
@@ -463,6 +558,8 @@ export class AtomicCutsceneRenderer implements RenderModule {
       this.group.visible = false;
       this.flashMaterial.opacity = 0;
       this.speedlines.visible = false;
+      this.soulGroup.visible = false;
+      this.soulCloudDeck.visible = false;
     }
   }
 
@@ -648,14 +745,33 @@ export class AtomicCutsceneRenderer implements RenderModule {
         if (this.speedlines.position.y < -30) this.speedlines.position.y = 20;
       }
     }
-    // Phase 6: Ascend into Heaven (6.2 - 6.8s)
+    // Phase 6: Ascend into Heaven — Soldier's ethereal soul floats up through the clouds
+    // and stops on the White Marble & Gold Staircase while demons advance to push them down!
     else if (phase === 'ascend') {
       this.explosionGroup.visible = false;
-      this.speedlines.visible = true;
-      this.speedlines.position.y -= dt * 90;
-      if (this.speedlines.position.y < -30) this.speedlines.position.y = 20;
+      this.speedlines.visible = p < 0.7;
+      if (this.speedlines.visible) {
+        this.speedlines.position.y -= dt * 55;
+        if (this.speedlines.position.y < -30) this.speedlines.position.y = 20;
+      }
+
+      // Smooth cubic ease-out so the soul floats upward through the clouds (-12 -> 0) and gently stops on the staircase at y = 0.05!
+      const easeOut = 1 - Math.pow(1 - p, 3);
+      const soulY = THREE.MathUtils.lerp(-11.5, 0.05, easeOut);
+      const soulX = THREE.MathUtils.lerp(this.warriorWorldX, 0, easeOut);
+
+      this.soulGroup.visible = true;
+      this.soulGroup.position.set(soulX, soulY, 0.15);
+      this.soulGroup.rotation.y = Math.sin(p * Math.PI) * 0.35;
+      this.soulMixer.update(dt);
+      this.soulHalo.rotation.z = this.time * 1.8;
+      this.soulAura.scale.setScalar(1.0 + Math.sin(this.time * 8) * 0.15);
+
+      this.soulCloudDeck.visible = true;
+      this.soulCloudDeck.position.set(soulX, 0, 0);
+
       this.flashMaterial.color.setHex(0xffeebb);
-      this.flashIntensity = THREE.MathUtils.lerp(0.8, 0, p);
+      this.flashIntensity = Math.max(0, (0.25 - p) * 2.5);
       this.flashMaterial.opacity = this.flashIntensity;
     }
   }

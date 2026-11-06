@@ -7,22 +7,22 @@ mkdirSync(artifactDir, { recursive: true });
 
 const server = spawn('node', ['scripts/build.mjs', '--serve'], {
   cwd: '/Users/lin/Games/shinobi-bridge-1d',
-  env: { ...process.env, PORT: '5210' },
+  env: { ...process.env, PORT: '5219' },
   stdio: 'ignore',
 });
 
 process.on('exit', () => server.kill());
 process.on('SIGINT', () => server.kill());
 
-await sleep(2000);
+await sleep(1500);
 
 const chromePath = '/Applications/Google Chrome.app/Contents/MacOS/Google Chrome';
 
-async function takeScreenshot(url, outputPath, waitMs = 1500) {
+async function takeScreenshot(url, outputPath, waitMs = 3000) {
   console.log(`Capturing: ${url} -> ${outputPath}`);
   const args = [
     '--headless=new',
-    '--user-data-dir=/tmp/chrome-profile-capture-celestial',
+    '--user-data-dir=/tmp/chrome-profile-capture-' + Math.floor(Math.random() * 10000),
     '--no-first-run',
     '--no-default-browser-check',
     '--disable-gpu-sandbox',
@@ -42,16 +42,24 @@ async function takeScreenshot(url, outputPath, waitMs = 1500) {
 }
 
 try {
+  // 1. Upgraded Celestial Heaven
   await takeScreenshot(
-    'http://localhost:5210/?autostart=1&celestial=1&lightblade=1',
+    'http://localhost:5219/?autostart=1&celestial=1&lightblade=1',
     `${artifactDir}/celestial_clash_battle.png`,
-    2000
+    3500
   );
-  console.log('Celestial screenshot captured successfully!');
+  console.log('Celestial screenshot captured!');
+
+  // 2. Pure White Rain on Mountain Peak
+  await takeScreenshot(
+    'http://localhost:5219/?autostart=1&seed=3&wave=2&t=10',
+    `${artifactDir}/pure_white_rain_peak.png`,
+    3500
+  );
+  console.log('Peak rain screenshot captured!');
 } catch (err) {
   console.error('Error during capture:', err);
 } finally {
   server.kill();
   process.exit(0);
 }
-

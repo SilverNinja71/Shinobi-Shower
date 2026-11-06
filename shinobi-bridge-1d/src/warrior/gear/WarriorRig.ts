@@ -496,12 +496,21 @@ export class WarriorRig {
     // Buckled knees lower the hips; drop the body with them so the feet stay on the planks.
     const stagger = -0.07 * this.hitWeight();
     const isCelestial = game.phase === 'celestial';
-    const deckY = isCelestial ? 0.05 : b.deckY(x);
-    const roll = isCelestial ? 0 : b.rollAt(x) * 0.6;
-    const pitch = isCelestial ? 0 : b.pitch(x) * 0.18;
-    const lateral = isCelestial ? 0 : b.lateral(x);
-    this.root.position.set(worldX(x), deckY + (isCelestial ? 0 : lift + stagger), lateral);
-    this.root.rotation.set(roll, 0, pitch);
+    const isAscend = game.phase === 'cutscene' && game.cutscene.phase === 'ascend';
+    if (isAscend) {
+      const easeOut = 1 - Math.pow(1 - game.cutscene.progress, 3);
+      const soulY = THREE.MathUtils.lerp(-11.5, 0.05, easeOut);
+      const soulX = THREE.MathUtils.lerp(worldX(game.cutscene.warriorX), 0, easeOut);
+      this.root.position.set(soulX, soulY, 0);
+      this.root.rotation.set(0, 0, 0);
+    } else {
+      const deckY = isCelestial ? 0.05 : b.deckY(x);
+      const roll = isCelestial ? 0 : b.rollAt(x) * 0.6;
+      const pitch = isCelestial ? 0 : b.pitch(x) * 0.18;
+      const lateral = isCelestial ? 0 : b.lateral(x);
+      this.root.position.set(worldX(x), deckY + (isCelestial ? 0 : lift + stagger), lateral);
+      this.root.rotation.set(roll, 0, pitch);
+    }
 
     const facing = this.facingFor(game);
     const step = dt / TURN_TIME;
