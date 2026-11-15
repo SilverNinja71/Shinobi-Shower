@@ -4,7 +4,7 @@
 //   npm run build   writes dist/index.html (a complete page), dist/bridge-artifact.html (the same page
 //                   without the document wrapper, for publishing) and dist/assets/.
 import { build, context } from 'esbuild';
-import { cp, mkdir, readFile, rm, symlink, writeFile } from 'node:fs/promises';
+import { cp, mkdir, readdir, readFile, rm, symlink, writeFile } from 'node:fs/promises';
 import { existsSync } from 'node:fs';
 import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
@@ -53,12 +53,24 @@ if (serve) {
   const server = await ctx.serve({ servedir: out, port });
   console.log(`Shinobi Bridge: http://localhost:${server.port}`);
 } else {
-  const result = await build({ ...shared, write: false, minify: true, define: { __DEV__: 'false' } });
-  const js = result.outputFiles[0].text.replaceAll('</script', '<\\/script');
-  const page = template.replace('<!--SCRIPTS-->', () => `<script>${js}</script>`);
+  const pageWith = async (define) => {
+    const result = await build({ ...shared, write: false, minify: true, define: { __DEV__: 'false', ...define } });
+    const js = result.outputFiles[0].text.replaceAll('</script', '<\\/script');
+    return template.replace('<!--SCRIPTS-->', () => `<script>${js}</script>`);
+  };
+  const page = await pageWith({});
+  // The artifact host serves images and scripts but not .glb or .stl, so the artifact page carries
+  // those binaries inside its script (see EMBEDDED in src/render/Assets.ts). Textures stay files.
+  const binaries = {};
+  for (const dir of ['chars', 'world']) {
+    for (const name of await readdir(join(root, 'assets', dir))) {
+      if (/\.(glb|stl)$/.test(name)) binaries[`assets/${dir}/${name}`] = (await readFile(join(root, 'assets', dir, name))).toString('base64');
+    }
+  }
+  const artifactPage = await pageWith({ __EMBEDDED_ASSETS__: JSON.stringify(binaries) });
   await rm(join(out, 'assets'), { recursive: true, force: true });
   await cp(join(root, 'assets'), join(out, 'assets'), { recursive: true });
-  await writeFile(join(out, 'bridge-artifact.html'), page);
+  await writeFile(join(out, 'bridge-artifact.html'), artifactPage);
   await writeFile(join(out, 'index.html'), wrap(page));
-  console.log(`Wrote dist/ (page ${(page.length / 1024).toFixed(0)} KB, plus assets/)`);
+  console.log(`Wrote dist/ (page ${(page.length / 1024).toFixed(0)} KB, artifact page ${(artifactPage.length / 1024).toFixed(0)} KB, plus assets/)`);
 }

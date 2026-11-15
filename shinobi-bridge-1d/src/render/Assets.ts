@@ -4,6 +4,24 @@ import type { GLTF } from 'three/examples/jsm/loaders/GLTFLoader.js';
 import wetSource from '../shaders/WetSurfacePBR.frag';
 import type { SharedUniforms } from './RenderContext.ts';
 
+declare const __EMBEDDED_ASSETS__: Record<string, string> | undefined;
+
+/**
+ * Binary assets built into the page, by URL (base64). Only the artifact build sets this: its host
+ * serves images and scripts but not .glb or .stl files, so those travel inside the script instead.
+ * Everywhere else this is empty and every asset is fetched as usual.
+ */
+const EMBEDDED: Record<string, string> = typeof __EMBEDDED_ASSETS__ === 'undefined' ? {} : __EMBEDDED_ASSETS__;
+
+function embeddedBytes(url: string): ArrayBuffer | null {
+  const b64 = EMBEDDED[url];
+  if (!b64) return null;
+  const bin = atob(b64);
+  const bytes = new Uint8Array(bin.length);
+  for (let i = 0; i < bin.length; i++) bytes[i] = bin.charCodeAt(i);
+  return bytes.buffer;
+}
+
 /** CC0 PBR sets in assets/tex (see CREDITS.md). */
 export type PBRName = 'plank' | 'slate' | 'rope' | 'snow' | 'burlap' | 'leather' | 'tile' | 'wall' | 'rock';
 
@@ -65,6 +83,15 @@ export class Assets {
     const fileLoader = new THREE.FileLoader(manager);
     fileLoader.setResponseType('arraybuffer');
     const aniso = Math.min(8, renderer.capabilities.getMaxAnisotropy());
+    // Built-in copies (artifact build) are parsed from memory; otherwise the files are fetched.
+    const gltf = (url: string): Promise<GLTF> => {
+      const bytes = embeddedBytes(url);
+      return bytes ? gltfLoader.parseAsync(bytes, url.slice(0, url.lastIndexOf('/') + 1)) : gltfLoader.loadAsync(url);
+    };
+    const binary = (url: string): Promise<ArrayBuffer> => {
+      const bytes = embeddedBytes(url);
+      return bytes ? Promise.resolve(bytes) : (fileLoader.loadAsync(url) as Promise<ArrayBuffer>);
+    };
 
     const stems: string[] = [];
     for (const [name, maps] of Object.entries(PBR_FILES)) for (const m of maps) stems.push(`${name}_${m}`);
@@ -82,12 +109,12 @@ export class Assets {
     });
     const [texPairs, body, anims, ninjaAnims, nature, wukong, nezhaBuf] = await Promise.all([
       Promise.all(texJobs),
-      gltfLoader.loadAsync('assets/chars/steve.glb'),
-      gltfLoader.loadAsync('assets/chars/anims.glb'),
-      gltfLoader.loadAsync('assets/chars/ninja_anims.glb'),
-      gltfLoader.loadAsync('assets/world/nature.glb'),
-      gltfLoader.loadAsync('assets/world/wukong.glb'),
-      fileLoader.loadAsync('assets/world/nezha.stl') as Promise<ArrayBuffer>,
+      gltf('assets/chars/steve.glb'),
+      gltf('assets/chars/anims.glb'),
+      gltf('assets/chars/ninja_anims.glb'),
+      gltf('assets/world/nature.glb'),
+      gltf('assets/world/wukong.glb'),
+      binary('assets/world/nezha.stl'),
     ]);
     const nezhaGeo = parseBinarySTL(nezhaBuf);
     return new Assets(Object.fromEntries(texPairs), { body, anims, ninjaAnims }, { nature, wukong, nezhaGeo }, aniso);
